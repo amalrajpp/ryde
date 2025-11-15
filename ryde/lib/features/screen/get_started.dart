@@ -93,7 +93,19 @@ class GetStartedPage extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          const Text("Or"),
+           Padding(
+             padding: const EdgeInsets.only(left: 8.0,right: 8.8),
+             child: Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Text("Or"),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                ],
+              ),
+           ),
 
           const SizedBox(height: 20),
 

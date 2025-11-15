@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:ryde/features/screen/login_page.dart';
 
-class SignUpPage extends StatefulWidget {
-  const SignUpPage({super.key});
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
 
   @override
-  State<SignUpPage> createState() => _SignUpPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
-class _SignUpPageState extends State<SignUpPage> {
+class _LoginPageState extends State<LoginPage> {
   bool showPassword = false;
 
   @override
@@ -18,7 +17,8 @@ class _SignUpPageState extends State<SignUpPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ---------------- HEADER IMAGE WITH GRADIENT ----------------
+
+            // ---------------- TOP IMAGE WITH GRADIENT ----------------
             Stack(
               children: [
                 Image.asset(
@@ -34,8 +34,8 @@ class _SignUpPageState extends State<SignUpPage> {
                       gradient: LinearGradient(
                         colors: [
                           Colors.white.withOpacity(0.0),
-                          Colors.white.withOpacity(0.3),
-                          Colors.white.withOpacity(0.7),
+                          Colors.white.withOpacity(0.4),
+                          Colors.white.withOpacity(0.9),
                           Colors.white,
                         ],
                         begin: Alignment.topCenter,
@@ -53,42 +53,37 @@ class _SignUpPageState extends State<SignUpPage> {
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                "Create Your Account",
-                style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+                "Welcome 👋",
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
 
             const SizedBox(height: 20),
 
-            // ---------------- NAME FIELD ----------------
+            // ---------------- EMAIL FIELD ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: TextField(
-                decoration: InputDecoration(
-                  labelText: "Name",
-                  hintText: "Enter name",
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30),
-                    borderSide: BorderSide.none,
-                  ),
+              child: Text(
+                "Email",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
                 ),
               ),
             ),
 
-            const SizedBox(height: 15),
-
-            // ---------------- EMAIL FIELD ----------------
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: TextField(
                 decoration: InputDecoration(
-                  labelText: "Email",
                   prefixIcon: const Icon(Icons.email_outlined),
                   hintText: "Enter email",
                   filled: true,
-                  fillColor: Colors.grey.shade100,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30),
                     borderSide: BorderSide(
@@ -100,27 +95,39 @@ class _SignUpPageState extends State<SignUpPage> {
               ),
             ),
 
-            const SizedBox(height: 15),
+            const SizedBox(height: 10),
 
             // ---------------- PASSWORD FIELD ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                "Password",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: TextField(
                 obscureText: !showPassword,
                 decoration: InputDecoration(
-                  labelText: "Password",
-                  hintText: "Enter password",
                   prefixIcon: const Icon(Icons.lock_outline),
+                  hintText: "Enter password",
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 15),
                   suffixIcon: IconButton(
                     icon: Icon(
                       showPassword ? Icons.visibility : Icons.visibility_off,
+                      color: Colors.grey,
                     ),
                     onPressed: () {
                       setState(() => showPassword = !showPassword);
                     },
                   ),
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30),
                     borderSide: BorderSide.none,
@@ -133,32 +140,26 @@ class _SignUpPageState extends State<SignUpPage> {
 
             // ---------------- SIGN UP BUTTON ----------------
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
+              padding: const EdgeInsets.symmetric(horizontal: 25),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const LoginPage(),
-                      ),
-                    );
-                  },
+                  onPressed: () {},
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
                     ),
-                    elevation: 0,
+                    elevation: 8,
+                    shadowColor: Colors.blue.shade200,
                   ),
                   child: const Text(
                     "Sign Up",
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -167,35 +168,33 @@ class _SignUpPageState extends State<SignUpPage> {
 
             const SizedBox(height: 20),
 
+            // ---------------- OR SEPARATOR ----------------
             Padding(
                padding: const EdgeInsets.only(left: 8.0,right: 8.8),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Divider(color: Colors.grey.shade300, thickness: 1),
-                  ),
+                  Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 10),
                     child: Text("Or"),
                   ),
-                  Expanded(
-                    child: Divider(color: Colors.grey.shade300, thickness: 1),
-                  ),
+                  Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
                 ],
               ),
             ),
 
-            const SizedBox(height: 15),
+            const SizedBox(height: 20),
 
-            // ---------------- GOOGLE SIGN IN BUTTON ----------------
+            // ---------------- GOOGLE LOGIN BUTTON ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 13),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(30),
                   border: Border.all(color: Colors.grey.shade300),
+                  color: Colors.white,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -214,7 +213,7 @@ class _SignUpPageState extends State<SignUpPage> {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 25),
 
             // ---------------- FOOTER TEXT ----------------
             Center(
@@ -222,7 +221,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    "Already have an account?",
+                    "Don't have an account?",
                     style: TextStyle(color: Colors.grey.shade700),
                   ),
                   const SizedBox(width: 5),
@@ -236,6 +235,8 @@ class _SignUpPageState extends State<SignUpPage> {
                 ],
               ),
             ),
+
+            const SizedBox(height: 25),
           ],
         ),
       ),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ryde/features/screen/login.dart';
+import 'package:ryde/features/screen/get_started.dart';
 
 class OnboardingPages extends StatefulWidget {
   const OnboardingPages({super.key});
@@ -205,7 +205,10 @@ class _OnboardingPagesState extends State<OnboardingPages> {
                       curve: Curves.easeInOut,
                     );
                   } else {
-                    // TODO: Navigate to home screen
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => GetStartedPage()),
+                    );
                   }
                 },
                 child: Container(
