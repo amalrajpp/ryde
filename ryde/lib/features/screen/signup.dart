@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ryde/features/screen/login.dart'; // <-- ADDED: Firebase Auth import
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -10,6 +12,97 @@ class SignUpPage extends StatefulWidget {
 class _SignUpPageState extends State<SignUpPage> {
   bool showPassword = false;
 
+  // --- ADDED: State variables ---
+  final _auth = FirebaseAuth.instance;
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+  // --- END: Added State variables ---
+
+  // --- ADDED: Dispose controllers ---
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+  // --- END: Added Dispose ---
+
+  // --- ADDED: Sign-up logic ---
+  Future<void> _signUp() async {
+    // Basic validation
+    if (_nameController.text.isEmpty ||
+        _emailController.text.isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields.')),
+      );
+      return; // Don't proceed
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 1. Create the user in Firebase Auth
+      UserCredential userCredential =
+          await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      // 2. Update the user's profile with their name
+      await userCredential.user?.updateDisplayName(_nameController.text.trim());
+      
+      // Optional: You might want to save the user to Firestore here as well
+
+      if (!mounted) return;
+
+      // 3. Handle success
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign up successful!')),
+      );
+
+      // Example: Navigate to a home page after success
+      // Navigator.of(context).pushReplacement(
+      //   MaterialPageRoute(builder: (context) => HomePage()),
+      // );
+      
+    } on FirebaseAuthException catch (e) {
+      // 4. Handle errors
+      String message;
+      if (e.code == 'weak-password') {
+        message = 'The password provided is too weak.';
+      } else if (e.code == 'email-already-in-use') {
+        message = 'An account already exists for that email.';
+      } else if (e.code == 'invalid-email') {
+        message = 'The email address is not valid.';
+      } else {
+        message = 'An error occurred. Please try again.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (e) {
+      // Handle any other errors
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('An unexpected error occurred: $e')),
+      );
+    } finally {
+      // 5. Always turn off loading state
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  // --- END: Added Sign-up logic ---
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -17,7 +110,6 @@ class _SignUpPageState extends State<SignUpPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            
             // ---------------- HEADER IMAGE WITH GRADIENT ----------------
             Stack(
               children: [
@@ -27,7 +119,6 @@ class _SignUpPageState extends State<SignUpPage> {
                   height: 260,
                   fit: BoxFit.cover,
                 ),
-        
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
@@ -46,9 +137,9 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ],
             ),
-        
+
             const SizedBox(height: 10),
-        
+
             // ---------------- TITLE ----------------
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
@@ -60,13 +151,14 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ),
             ),
-        
+
             const SizedBox(height: 20),
-        
+
             // ---------------- NAME FIELD ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
+                controller: _nameController, // <-- ADDED
                 decoration: InputDecoration(
                   labelText: "Name",
                   hintText: "Enter name",
@@ -79,13 +171,15 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ),
             ),
-        
+
             const SizedBox(height: 15),
-        
+
             // ---------------- EMAIL FIELD ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
+                controller: _emailController, // <-- ADDED
+                keyboardType: TextInputType.emailAddress, // <-- ADDED
                 decoration: InputDecoration(
                   labelText: "Email",
                   prefixIcon: const Icon(Icons.email_outlined),
@@ -102,13 +196,14 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ),
             ),
-        
+
             const SizedBox(height: 15),
-        
+
             // ---------------- PASSWORD FIELD ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
+                controller: _passwordController, // <-- ADDED
                 obscureText: !showPassword,
                 decoration: InputDecoration(
                   labelText: "Password",
@@ -133,37 +228,51 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ),
             ),
-        
+
             const SizedBox(height: 25),
-        
+
             // ---------------- SIGN UP BUTTON ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                decoration: BoxDecoration(
-                  color: Colors.blue,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  "Sign Up",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+              child: GestureDetector( // <-- MODIFIED: Was Container
+                onTap: _isLoading ? null : _signUp, // <-- ADDED: Tap handler
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  decoration: BoxDecoration(
+                    // <-- ADDED: Visual loading feedback
+                    color: _isLoading ? Colors.blue.shade200 : Colors.blue, 
+                    borderRadius: BorderRadius.circular(30),
                   ),
+                  alignment: Alignment.center,
+                  // <-- MODIFIED: Show loader or text
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 3,
+                          ),
+                        )
+                      : const Text(
+                          "Sign Up",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
             ),
-        
+
             const SizedBox(height: 20),
-        
+
             const Center(child: Text("Or")),
-        
+
             const SizedBox(height: 15),
-        
+
             // ---------------- GOOGLE SIGN IN BUTTON ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
@@ -190,9 +299,9 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ),
             ),
-        
+
             const SizedBox(height: 20),
-        
+
             // ---------------- FOOTER TEXT ----------------
             Center(
               child: Row(
@@ -203,17 +312,25 @@ class _SignUpPageState extends State<SignUpPage> {
                     style: TextStyle(color: Colors.grey.shade700),
                   ),
                   const SizedBox(width: 5),
-                  const Text(
-                    "Log in",
-                    style: TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.w600,
+                  GestureDetector(
+                    child: const Text(
+                      "Log in",
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
+                          onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const GetStartedPage()),
+        );
+      },
                   ),
                 ],
               ),
             ),
-        
+            const SizedBox(height: 30), // <-- ADDED: Extra space
           ],
         ),
       ),

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "860909666780",
+    "project_id": "ryde-f95e9",
+    "storage_bucket": "ryde-f95e9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:860909666780:android:30bd50d8fc0741f9b70f19",
+        "android_client_info": {
+          "package_name": "com.example.ryde"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAqDp7T3q3ls1EjA823MN2sTQuhNBU9D2Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
