@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ryde/features/screen/login.dart'; // <-- ADDED: Firebase Auth import
+import 'package:ryde/features/screen/login_page.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -145,10 +146,7 @@ class _SignUpPageState extends State<SignUpPage> {
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 "Create Your Account",
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
               ),
             ),
 
@@ -211,9 +209,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      showPassword
-                          ? Icons.visibility
-                          : Icons.visibility_off,
+                      showPassword ? Icons.visibility : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() => showPassword = !showPassword);
@@ -269,7 +265,23 @@ class _SignUpPageState extends State<SignUpPage> {
 
             const SizedBox(height: 20),
 
-            const Center(child: Text("Or")),
+            Padding(
+               padding: const EdgeInsets.only(left: 8.0,right: 8.8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Divider(color: Colors.grey.shade300, thickness: 1),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Text("Or"),
+                  ),
+                  Expanded(
+                    child: Divider(color: Colors.grey.shade300, thickness: 1),
+                  ),
+                ],
+              ),
+            ),
 
             const SizedBox(height: 15),
 
@@ -330,7 +342,6 @@ class _SignUpPageState extends State<SignUpPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 30), // <-- ADDED: Extra space
           ],
         ),
       ),
