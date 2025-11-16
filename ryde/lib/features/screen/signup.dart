@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:ryde/features/screen/login.dart'; // <-- ADDED: Firebase Auth import
 import 'package:ryde/features/screen/login_page.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -335,7 +334,7 @@ class _SignUpPageState extends State<SignUpPage> {
                           onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const GetStartedPage()),
+          MaterialPageRoute(builder: (context) => const LoginPage()),
         );
       },
                   ),
