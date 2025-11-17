@@ -23,10 +23,6 @@ class _OnboardingPagesState extends State<OnboardingPages> {
               alignment: Alignment.topRight,
               child: TextButton(
                 onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => GetStartedPage()),
-                  );
                 },
                 child: const Text(
                   "Skip",
