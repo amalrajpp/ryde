@@ -1,8 +1,48 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:ryde/features/screen/signup.dart';
 
-class GetStartedPage extends StatelessWidget {
+class GetStartedPage extends StatefulWidget {
   const GetStartedPage({super.key});
+
+  @override
+  State<GetStartedPage> createState() => _GetStartedPageState();
+}
+
+class _GetStartedPageState extends State<GetStartedPage> {
+    Future<void> loginWithGoogle() async {
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        scopes: ['email'],
+      );
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        return; // cancelled
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Google login successful")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Google login failed: $e")),
+      );
+      // ignore: avoid_print
+      print(e);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,26 +152,29 @@ class GetStartedPage extends StatelessWidget {
           // ---------------------- GOOGLE LOGIN BUTTON ----------------------
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.network(
-                    "https://developers.google.com/identity/images/g-logo.png",
-                    height: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    "Log In with Google",
-                    style: TextStyle(fontSize: 15),
-                  ),
-                ],
+            child: GestureDetector(
+              onTap: loginWithGoogle,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.network(
+                      "https://developers.google.com/identity/images/g-logo.png",
+                      height: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      "Log In with Google",
+                      style: TextStyle(fontSize: 15),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
