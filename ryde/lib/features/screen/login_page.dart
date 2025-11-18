@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -54,7 +55,15 @@ class _LoginPageState extends State<LoginPage> {
         idToken: googleAuth.idToken,
       );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCredential =await FirebaseAuth.instance.signInWithCredential(credential);
+            final user = userCredential.user;
+    if (user == null) return;
+
+        await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
+      "email": user.email,
+      "createdAt": FieldValue.serverTimestamp(),
+      "updatedAt": FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true)); // merge avoids overwrite
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Google login successful")),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ryde/features/screen/ride_booking.dart';
 
 class SearchBarWidget extends StatelessWidget {
   final TextEditingController controller;
@@ -7,19 +8,29 @@ class SearchBarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: TextField(
-        controller: controller,
-        decoration: const InputDecoration(
-          prefixIcon: Icon(Icons.search),
-          hintText: "Where do you want to go?",
-          border: InputBorder.none,
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => RideBookingScreen()),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: AbsorbPointer(
+          child: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: "Where do you want to go?",
+              border: InputBorder.none,
+            ),
+          ),
         ),
       ),
     );

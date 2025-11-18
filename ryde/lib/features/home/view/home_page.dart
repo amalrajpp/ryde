@@ -1,81 +1,58 @@
 import 'package:flutter/material.dart';
+import 'package:ryde/features/home/view/home_content.dart';
 import 'package:ryde/features/home/viewmodel/home_viewmodel.dart';
-
 import 'package:ryde/features/home/widgets/bottom_navbar.dart';
-
+import 'package:ryde/features/screen/chat.dart';
 import '../widgets/home_header.dart';
 import '../widgets/search_bar.dart';
 import '../widgets/location_map.dart';
 import '../widgets/recent_rides_card.dart';
 
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
-class HomePage extends StatelessWidget {
-  HomePage({super.key});
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
 
+class _HomePageState extends State<HomePage> {
   final HomeViewModel vm = HomeViewModel();
+
+  final List<Widget> screens = const [
+    HomeContentScreen(), // index 0
+    DummyScreen(title: "Car Screen"), // index 1
+    UberChatListScreen(),
+    DummyScreen(title: "Profile Screen"), // index 3
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
-
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 10),
-
-                HomeHeader(
-                  username: vm.username,
-                  onLogout: vm.logout,
-                ),
-
-                const SizedBox(height: 20),
-
-                SearchBarWidget(controller: vm.searchController),
-
-                const SizedBox(height: 25),
-
-                const Text(
-                  "Your current location",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                const LocationMap(
-                    imagePath: "assets/images/dummy-map.jpg"),
-
-                const SizedBox(height: 25),
-
-                const Text(
-                  "Recent Rides",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-
-                const SizedBox(height: 15),
-
-                const RecentRidesCard(),
-
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-        ),
-      ),
-
+      body: screens[vm.navIndex], // Screen switching
       bottomNavigationBar: BottomNavBar(
         selectedIndex: vm.navIndex,
-        onTap: vm.onNavTap,
+        onTap: (index) {
+          setState(() {
+            vm.onNavTap(index);
+          });
+        },
+      ),
+    );
+  }
+}
+
+class DummyScreen extends StatelessWidget {
+  final String title;
+
+  const DummyScreen({super.key, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
       ),
     );
   }
