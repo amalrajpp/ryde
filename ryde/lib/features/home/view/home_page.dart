@@ -3,6 +3,8 @@ import 'package:ryde/features/home/view/home_content.dart';
 import 'package:ryde/features/home/viewmodel/home_viewmodel.dart';
 import 'package:ryde/features/home/widgets/bottom_navbar.dart';
 import 'package:ryde/features/screen/chat.dart';
+import 'package:ryde/features/screen/history.dart';
+import 'package:ryde/features/screen/profile.dart';
 import '../widgets/home_header.dart';
 import '../widgets/search_bar.dart';
 import '../widgets/location_map.dart';
@@ -20,9 +22,9 @@ class _HomePageState extends State<HomePage> {
 
   final List<Widget> screens = const [
     HomeContentScreen(), // index 0
-    DummyScreen(title: "Car Screen"), // index 1
+    PopularCarScreen(), // index 1
     UberChatListScreen(),
-    DummyScreen(title: "Profile Screen"), // index 3
+    ProfileScreen(),
   ];
 
   @override
@@ -37,22 +39,6 @@ class _HomePageState extends State<HomePage> {
             vm.onNavTap(index);
           });
         },
-      ),
-    );
-  }
-}
-
-class DummyScreen extends StatelessWidget {
-  final String title;
-
-  const DummyScreen({super.key, required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
       ),
     );
   }

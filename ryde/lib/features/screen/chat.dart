@@ -180,7 +180,7 @@ class UberChatListScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          "Messages",
+          "Chat List",
           style: TextStyle(
             color: Colors.black,
             fontWeight: FontWeight.bold,
