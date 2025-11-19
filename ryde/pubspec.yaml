@@ -42,6 +42,8 @@ dependencies:
   google_sign_in: ^6.2.1
   flutter_chat_ui: ^1.6.11
   flutter_chat_types: ^3.6.2
+  flutter_riverpod: ^3.0.3
+  riverpod_annotation: ^3.0.3
   # Utilities
   uuid: ^4.0.0
   intl: ^0.18.0
@@ -58,6 +60,10 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  build_runner: ^2.7.1
+  riverpod_lint: ^3.0.3
+  custom_lint: ^0.8.0
+  riverpod_generator: ^3.0.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

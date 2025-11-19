@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "860909666780-bs3hjsc0ics27hbk81taqto4qhtr7q36.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ryde",
+            "certificate_hash": "c229898be543bf5bf3bc5ea9635a7ff63af27b60"
+          }
+        },
+        {
           "client_id": "860909666780-lffg5nobl3e8eknjfo17k8u02919lhqf.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
