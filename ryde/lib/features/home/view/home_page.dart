@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ryde/features/car-screen/view/popularCarpage.dart';
 import 'package:ryde/features/home/view/home_content.dart';
 import 'package:ryde/features/home/viewmodel/home_viewmodel.dart';
 import 'package:ryde/features/home/widgets/bottom_navbar.dart';
@@ -22,7 +23,7 @@ class _HomePageState extends State<HomePage> {
 
   final List<Widget> screens = const [
     HomeContentScreen(), // index 0
-    PopularCarScreen(), // index 1
+    PopularCarsPage(), // index 1
     UberChatListScreen(),
     ProfileScreen(),
   ];
