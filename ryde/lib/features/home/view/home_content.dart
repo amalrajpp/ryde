@@ -36,7 +36,8 @@ class HomeContentScreen extends StatelessWidget {
 
               const SizedBox(height: 12),
 
-              const LocationMap(imagePath: "assets/images/dummy-map.jpg"),
+              // const LocationMap(imagePath: "assets/images/dummy-map.jpg"),
+              LocationMap(height: 240),
 
               const SizedBox(height: 25),
 
