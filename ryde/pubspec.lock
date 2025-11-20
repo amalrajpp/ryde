@@ -502,7 +502,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.1"
-<<<<<<< HEAD
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -511,7 +510,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.32"
-=======
   flutter_riverpod:
     dependency: "direct main"
     description:
@@ -520,7 +518,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.3"
->>>>>>> 855eeb441702138bb5c22e9f8564d85b234a6608
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -955,16 +952,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-<<<<<<< HEAD
-  sanitize_html:
-    dependency: transitive
-    description:
-      name: sanitize_html
-      sha256: "12669c4a913688a26555323fb9cec373d8f9fbe091f2d01c40c723b33caa8989"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.1.0"
-=======
   pool:
     dependency: transitive
     description:
@@ -1037,7 +1024,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.28.0"
->>>>>>> 855eeb441702138bb5c22e9f8564d85b234a6608
+  sanitize_html:
+    dependency: transitive
+    description:
+      name: sanitize_html
+      sha256: "12669c4a913688a26555323fb9cec373d8f9fbe091f2d01c40c723b33caa8989"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.0"
   scroll_to_index:
     dependency: transitive
     description:
@@ -1215,10 +1209,10 @@ packages:
     dependency: transitive
     description:
       name: url_launcher_android
-      sha256: dff5e50339bf30b06d7950b50fda58164d3d8c40042b104ed041ddc520fbff28
+      sha256: "1a109ee074e2a3b17ec3f2785248cb3e93c1e4abab878f637bc33267089f05a3"
       url: "https://pub.dev"
     source: hosted
-    version: "6.3.25"
+    version: "6.3.26"
   url_launcher_ios:
     dependency: transitive
     description:
