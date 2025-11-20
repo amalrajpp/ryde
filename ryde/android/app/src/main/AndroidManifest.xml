@@ -3,6 +3,8 @@
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+<uses-permission android:name="android.permission.INTERNET"/>
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
     <application
         android:label="ryde"
@@ -35,9 +37,6 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-         
-        <meta-data android:name="com.google.android.geo.API_KEY"
-               android:value="AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
