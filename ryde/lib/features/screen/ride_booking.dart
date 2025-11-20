@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:convert'; // NEW: For JSON decoding
-import 'dart:io'; // NEW: For making HTTP requests without extra packages
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -21,7 +21,7 @@ class RideOption {
   final String carImage;
   final String driverImage;
   final String carDescription;
-  final LatLng driverLocation; // NEW: Needed for routing
+  final LatLng driverLocation;
 
   RideOption({
     required this.id,
@@ -47,7 +47,6 @@ class RideBookingScreen extends StatefulWidget {
 class _RideBookingScreenState extends State<RideBookingScreen> {
   final Completer<GoogleMapController> _mapController = Completer();
 
-  // 1. SETUP KEYS
   final String _googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
   late PlaceService _placeService;
   final _uuid = const Uuid();
@@ -60,17 +59,20 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   List<PlacePrediction> _toSuggestions = [];
   bool _isFromFieldFocused = false;
 
-  // 2. LOCATION & ROUTING STATE
-  LatLng? _fromLatLng; // Stores actual coordinates of pickup
-  LatLng? _toLatLng; // Stores actual coordinates of dropoff
-  double _tripDistanceKm = 0.0; // Calculated distance
-  Set<Polyline> _polylines = {}; // Stores the road line
+  // Location & Routing
+  LatLng? _fromLatLng;
+  LatLng? _toLatLng;
+  double _tripDistanceKm = 0.0;
+  Set<Polyline> _polylines = {};
 
-  // 3. UI STATE
+  // UI State
   bool _showRideList = false;
   String? _selectedRideId;
 
-  // 4. MAP & DRIVER STATE
+  // MODIFIED: New state to track if we are searching/filling details
+  bool _isSearching = false;
+
+  // Map & Driver State
   Set<Marker> _markers = {};
   BitmapDescriptor? _carIcon;
   StreamSubscription? _driverSubscription;
@@ -169,9 +171,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   icon: _carIcon ?? BitmapDescriptor.defaultMarker,
                   rotation: (location['heading'] as num?)?.toDouble() ?? 0.0,
                   anchor: const Offset(0.5, 0.5),
-                  onTap: () {
-                    // Optional: Tap marker to select driver logic
-                  },
                 ),
               );
             }
@@ -196,7 +195,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
     Position position = await Geolocator.getCurrentPosition();
 
-    // Set current location as "From" initially
     setState(() {
       _fromLatLng = LatLng(position.latitude, position.longitude);
     });
@@ -242,7 +240,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     }
   }
 
-  // NEW: Fetch LatLng from Place ID to enable routing and pricing
   Future<void> _getPlaceDetails(
     String placeId,
     String description,
@@ -275,6 +272,8 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             _toController.text = description;
             _toSuggestions = [];
           }
+          // MODIFIED: When a place is picked, collapse the view and hide keyboard
+          _isSearching = false;
           FocusScope.of(context).unfocus();
         });
       }
@@ -284,15 +283,8 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   }
 
   Future<void> _drawRoute(LatLng driverLoc) async {
-    if (_fromLatLng == null) {
-      print("ERROR: From Location is null");
-      return;
-    }
+    if (_fromLatLng == null) return;
 
-    // Print for debugging
-    print("FETCHING DIRECTIONS...");
-    print("Origin: ${_fromLatLng!.latitude},${_fromLatLng!.longitude}");
-    print("Destination: ${driverLoc.latitude},${driverLoc.longitude}");
     final String _googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
     final String url =
         "https://maps.googleapis.com/maps/api/directions/json?origin=${_fromLatLng!.latitude},${_fromLatLng!.longitude}&destination=${driverLoc.latitude},${driverLoc.longitude}&mode=driving&key=$_googleApiKey";
@@ -305,21 +297,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       final String responseBody = await response.transform(utf8.decoder).join();
       final json = jsonDecode(responseBody);
 
-      // CHECK API STATUS
-      if (json['status'] != 'OK') {
-        print("---------------------------------------");
-        print("DIRECTIONS API ERROR: ${json['status']}");
-        print("ERROR MESSAGE: ${json['error_message']}");
-        print("---------------------------------------");
-
-        // Show snackbar to user for visibility
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Map Error: ${json['status']}")),
-          );
-        }
-        return;
-      }
+      if (json['status'] != 'OK') return;
 
       if (json['routes'] != null && json['routes'].isNotEmpty) {
         final String polylinePoints =
@@ -327,11 +305,11 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         final List<LatLng> decodedPoints = _decodePolyline(polylinePoints);
 
         setState(() {
-          _polylines.clear(); // Clear previous lines
+          _polylines.clear();
           _polylines.add(
             Polyline(
               polylineId: const PolylineId("user_to_driver"),
-              color: Colors.blue, // Make sure color is visible
+              color: Colors.blue,
               width: 6,
               points: decodedPoints,
               geodesic: true,
@@ -339,9 +317,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
           );
         });
 
-        print("ROUTE DRAWN with ${decodedPoints.length} points");
-
-        // Adjust Camera to fit route
         final GoogleMapController controller = await _mapController.future;
         LatLngBounds bounds = _boundsFromLatLngList(decodedPoints);
         controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
@@ -351,7 +326,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     }
   }
 
-  // Helper: Decode Google Polyline String
   List<LatLng> _decodePolyline(String encoded) {
     List<LatLng> points = [];
     int index = 0, len = encoded.length;
@@ -379,7 +353,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     return points;
   }
 
-  // Helper: Create Bounds for camera
   LatLngBounds _boundsFromLatLngList(List<LatLng> list) {
     double? minLat, maxLat, minLng, maxLng;
     for (final latLng in list) {
@@ -409,10 +382,16 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     }
   }
 
+  // MODIFIED: Helper logic to determine current sheet height
+  double _getSheetHeight(double screenHeight) {
+    if (_showRideList) return screenHeight * 0.55;
+    if (_isSearching) return screenHeight * 0.85; // Expanded Height
+    return screenHeight * 0.40; // Default Compact Height
+  }
+
   @override
   Widget build(BuildContext context) {
     final double screenHeight = MediaQuery.of(context).size.height;
-    // Check if both fields are filled and we have coordinates
     final bool isFindNowEnabled =
         _fromLatLng != null &&
         _toLatLng != null &&
@@ -428,7 +407,8 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             top: 0,
             left: 0,
             right: 0,
-            height: _showRideList ? screenHeight * 0.5 : screenHeight * 0.6,
+            // MODIFIED: Map height adjusts dynamically
+            height: screenHeight,
             child: GoogleMap(
               mapType: MapType.normal,
               initialCameraPosition: _kInitialPosition,
@@ -437,7 +417,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               zoomControlsEnabled: false,
               compassEnabled: false,
               markers: _markers,
-              polylines: _polylines, // NEW: Polylines added
+              polylines: _polylines,
               onMapCreated: (controller) => _mapController.complete(controller),
             ),
           ),
@@ -470,10 +450,16 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                       child: IconButton(
                         icon: const Icon(Icons.arrow_back, color: Colors.black),
                         onPressed: () {
+                          // MODIFIED: Handle back press for both states
                           if (_showRideList) {
                             setState(() {
                               _showRideList = false;
-                              _polylines.clear(); // Clear route when going back
+                              _polylines.clear();
+                            });
+                          } else if (_isSearching) {
+                            setState(() {
+                              _isSearching = false;
+                              FocusScope.of(context).unfocus();
                             });
                           } else {
                             Navigator.pop(context);
@@ -502,7 +488,8 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
-              height: _showRideList ? screenHeight * 0.55 : screenHeight * 0.40,
+              // MODIFIED: Call helper for height logic
+              height: _getSheetHeight(screenHeight),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.only(
@@ -548,10 +535,16 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             placeholder: "From location",
             prefixIcon: Icons.location_on_outlined,
             suffixIcon: Icons.my_location,
-            onFocus: () => setState(() => _isFromFieldFocused = true),
+            // MODIFIED: Set _isSearching to true to expand sheet
+            onFocus: () => setState(() {
+              _isFromFieldFocused = true;
+              _isSearching = true;
+            }),
           ),
           if (_isFromFieldFocused && _fromSuggestions.isNotEmpty)
-            _buildSuggestionList(_fromSuggestions, true),
+            Expanded(
+              child: _buildSuggestionList(_fromSuggestions, true),
+            ), // MODIFIED: Wrapped in Expanded
 
           const SizedBox(height: 20),
           const Text(
@@ -568,31 +561,37 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             placeholder: "To location",
             prefixIcon: Icons.location_on_outlined,
             suffixIcon: Icons.map_outlined,
-            onFocus: () => setState(() => _isFromFieldFocused = false),
+            // MODIFIED: Set _isSearching to true to expand sheet
+            onFocus: () => setState(() {
+              _isFromFieldFocused = false;
+              _isSearching = true;
+            }),
           ),
           if (!_isFromFieldFocused && _toSuggestions.isNotEmpty)
-            _buildSuggestionList(_toSuggestions, false),
+            Expanded(
+              child: _buildSuggestionList(_toSuggestions, false),
+            ), // MODIFIED: Wrapped in Expanded
 
           const Spacer(),
 
-          // FIND NOW BUTTON
           SizedBox(
             width: double.infinity,
             height: 55,
             child: ElevatedButton(
-              // NEW: Disable button if fields are not valid
               onPressed: isButtonEnabled
                   ? () {
-                      _calculateDistanceAndPrice(); // Calculate before showing list
+                      _calculateDistanceAndPrice();
                       setState(() {
                         _showRideList = true;
+                        _isSearching =
+                            false; // Collapse back to list view height
+                        FocusScope.of(context).unfocus();
                       });
                     }
                   : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF3B82F6),
-                disabledBackgroundColor:
-                    Colors.grey.shade300, // Grey when disabled
+                disabledBackgroundColor: Colors.grey.shade300,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(30),
@@ -649,21 +648,17 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   final vehicle =
                       data['vehicle'] as Map<String, dynamic>? ?? {};
 
-                  // NEW: Get Driver Location for routing
                   final locMap = data['location'] as Map<String, dynamic>;
                   LatLng dLoc = LatLng(locMap['lat'], locMap['lng']);
 
-                  // NEW: Calculate Price Based on Trip Distance
-                  // Base Fare: $50 + ($2.50 * KM)
                   double calculatedPrice = 50.0 + (_tripDistanceKm * 2.5);
 
                   final ride = RideOption(
                     id: docId,
                     driverName: data['driverName'] ?? "Unknown Driver",
                     rating: (data['rating'] as num?)?.toDouble() ?? 5.0,
-                    price: calculatedPrice, // Use Calculated Price
-                    time:
-                        "${(5 + Random().nextInt(10))} min", // Mock arrival time
+                    price: calculatedPrice,
+                    time: "${(5 + Random().nextInt(10))} min",
                     seats: "4 Seats",
                     driverImage: 'https://i.pravatar.cc/150?u=$docId',
                     carImage:
@@ -679,7 +674,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   return InkWell(
                     onTap: () {
                       setState(() => _selectedRideId = ride.id);
-                      // NEW: Draw Route when driver is tapped
                       _drawRoute(ride.driverLocation);
                     },
                     child: Container(
@@ -831,7 +825,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
   Widget _buildSuggestionList(List<PlacePrediction> suggestions, bool isFrom) {
     return Container(
-      height: 150,
+      // MODIFIED: Removed fixed height to allow expanding within the Expanded widget
       margin: const EdgeInsets.only(top: 5),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -859,7 +853,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             ),
             leading: const Icon(Icons.place, size: 20, color: Colors.grey),
             onTap: () {
-              // NEW: Call helper to get coords
               _getPlaceDetails(place.placeId, place.description, isFrom);
             },
           );
@@ -883,8 +876,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       child: TextField(
         controller: controller,
         onTap: onFocus,
-        onChanged: (value) =>
-            onFocus(), // Keeps state updating for button enable/disable
+        onChanged: (value) => onFocus(),
         decoration: InputDecoration(
           hintText: placeholder,
           hintStyle: const TextStyle(color: Colors.grey),
