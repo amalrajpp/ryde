@@ -9,7 +9,7 @@ import 'package:ryde/features/screen/history.dart';
 import 'package:ryde/features/screen/profile.dart';
 import '../widgets/home_header.dart';
 import '../widgets/search_bar.dart';
-import '../widgets/location_map.dart';
+import 'location_map.dart';
 import '../widgets/recent_rides_card.dart';
 
 class HomePage extends StatefulWidget {
