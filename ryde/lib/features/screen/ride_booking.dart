@@ -224,6 +224,30 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         }, onError: (e) => print("Error listening to drivers: $e"));
   }
 
+  // --- NEW HELPER: Reverse Geocoding to get Address Text ---
+  Future<String> _getAddressFromLatLng(double lat, double lng) async {
+    try {
+      final String _googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
+      final String url =
+          "https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$_googleApiKey";
+      final HttpClientRequest request = await HttpClient().getUrl(
+        Uri.parse(url),
+      );
+      final HttpClientResponse response = await request.close();
+      final String responseBody = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(responseBody);
+
+      if (json['status'] == 'OK' &&
+          json['results'] != null &&
+          json['results'].isNotEmpty) {
+        return json['results'][0]['formatted_address'];
+      }
+    } catch (e) {
+      print("Error fetching address: $e");
+    }
+    return "Current Location";
+  }
+
   Future<void> _determinePosition() async {
     bool serviceEnabled;
     LocationPermission permission;
@@ -240,8 +264,15 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
     Position position = await Geolocator.getCurrentPosition();
 
+    // Get the address string for the current location
+    String currentAddress = await _getAddressFromLatLng(
+      position.latitude,
+      position.longitude,
+    );
+
     setState(() {
       _fromLatLng = LatLng(position.latitude, position.longitude);
+      _fromController.text = currentAddress; // <--- Fills the text field
     });
 
     final GoogleMapController controller = await _mapController.future;
@@ -257,6 +288,14 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
   // --- 2. SEARCH & PLACE DETAILS LOGIC ---
   void _onSearchChanged(String input, {required bool isFrom}) async {
+    // Prevent searching if we are just setting the current location programmatically
+    if (!isFrom && input.isEmpty) {
+      setState(() => _toSuggestions = []);
+      return;
+    }
+    // If the user is typing in "From" manually, allow search
+    if (isFrom && !_isFromFieldFocused) return;
+
     if (input.isEmpty) {
       setState(() {
         if (isFrom)
@@ -274,10 +313,8 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       setState(() {
         if (isFrom) {
           _fromSuggestions = suggestions;
-          _isFromFieldFocused = true;
         } else {
           _toSuggestions = suggestions;
-          _isFromFieldFocused = false;
         }
       });
     } catch (e) {
@@ -290,6 +327,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     String description,
     bool isFrom,
   ) async {
+    final String _googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
     final String url =
         "https://maps.googleapis.com/maps/api/place/details/json?place_id=$placeId&fields=geometry&key=$_googleApiKey";
 
@@ -328,7 +366,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   // --- ROUTE & ARRIVAL TIME (DRIVER -> PICKUP) ---
   Future<void> _drawRoute(LatLng driverLoc) async {
     if (_fromLatLng == null) return;
-
+    final String _googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
     final String url =
         "https://maps.googleapis.com/maps/api/directions/json?origin=${_fromLatLng!.latitude},${_fromLatLng!.longitude}&destination=${driverLoc.latitude},${driverLoc.longitude}&mode=driving&key=$_googleApiKey";
 
@@ -440,7 +478,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     if (_fromLatLng == null || _toLatLng == null) return;
 
     setState(() => _isLoading = true);
-
+    final String _googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
     final String url =
         "https://maps.googleapis.com/maps/api/directions/json?origin=${_fromLatLng!.latitude},${_fromLatLng!.longitude}&destination=${_toLatLng!.latitude},${_toLatLng!.longitude}&mode=driving&key=$_googleApiKey";
 

@@ -6,124 +6,142 @@ class RecentRidesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          // Top image + locations
+          // Top Section: Map & Locations
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  "assets/images/dummy-map.jpg",
-                  height: 60,
-                  width: 60,
-                  fit: BoxFit.cover,
+              // Map Thumbnail
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  image: const DecorationImage(
+                    image: NetworkImage(
+                      "https://developers.google.com/static/maps/documentation/urls/images/map-no-params.png",
+                    ), // Dummy map image
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
+              // Location Details
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    _RideAddressRow(
-                      icon: Icons.location_on_outlined,
-                      text: "1901 Thornridge Cir, Shiloh",
+                  children: [
+                    _buildLocationRow(
+                      icon: Icons.navigation_outlined, // Triangle icon
+                      text: "1901 Thornridge Cir. Shiloh",
+                      iconRotation: 1.5, // Rotates icon to point right
                     ),
-                    SizedBox(height: 5),
-                    _RideAddressRow(
-                      icon: Icons.place_outlined,
-                      text: "4140 Parker Rd, Allentown",
+                    const SizedBox(height: 12),
+                    _buildLocationRow(
+                      icon: Icons.location_on_outlined,
+                      text: "4140 Parker Rd. Allentown",
                     ),
                   ],
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 20),
 
-          const SizedBox(height: 15),
-          const Divider(),
-          const SizedBox(height: 10),
-
-          // Ride details
-          _RideDetail(title: "Date & Time", value: "16 July 2025, 10:30 PM"),
-          _RideDetail(title: "Driver", value: "Jane Cooper"),
-          _RideDetail(title: "Car seats", value: "4"),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("Payment Status",
-                  style: TextStyle(color: Colors.grey)),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.shade100,
-                  borderRadius: BorderRadius.circular(10),
+          // Bottom Section: Details List
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F9FB), // Very light grey inside card
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                _buildDetailRow("Date & Time", "16 July 2025, 10:30 PM"),
+                const Divider(height: 24, color: Color(0xFFEEEEEE)),
+                _buildDetailRow("Driver", "Jane Cooper"),
+                const Divider(height: 24, color: Color(0xFFEEEEEE)),
+                _buildDetailRow("Car seats", "4"),
+                const Divider(height: 24, color: Color(0xFFEEEEEE)),
+                _buildDetailRow(
+                  "Payment Status",
+                  "Paid",
+                  valueColor: Colors.green, // Override color for Paid
                 ),
-                child: const Text("Paid",
-                    style: TextStyle(color: Colors.green)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Sub-widgets
-class _RideAddressRow extends StatelessWidget {
-  final IconData icon;
-  final String text;
-
-  const _RideAddressRow({required this.icon, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 16),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(fontSize: 14),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _RideDetail extends StatelessWidget {
-  final String title;
-  final String value;
-
-  const _RideDetail({required this.title, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: const TextStyle(color: Colors.grey)),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
+              ],
             ),
           ),
         ],
       ),
     );
   }
+}
+
+// Helper for the Location rows (Top part)
+Widget _buildLocationRow({
+  required IconData icon,
+  required String text,
+  double iconRotation = 0,
+}) {
+  return Row(
+    children: [
+      RotatedBox(
+        quarterTurns: iconRotation > 0 ? 1 : 0, // Simple rotation logic
+        child: Icon(icon, size: 20, color: Colors.black87),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFF333333),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ],
+  );
+}
+
+// Helper for the Details rows (Bottom part)
+Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? const Color(0xFF333333),
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    ),
+  );
 }
