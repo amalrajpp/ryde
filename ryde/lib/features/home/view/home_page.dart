@@ -24,7 +24,7 @@ class _HomePageState extends State<HomePage> {
 
   final List<Widget> screens = const [
     HomeContentScreen(), // index 0
-    PopularCarScreen(), // index 1
+    HistoryScreen(), // index 1
     UberChatListScreen(),
     ProfileScreen(),
   ];

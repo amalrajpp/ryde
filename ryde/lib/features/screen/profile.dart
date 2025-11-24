@@ -1,6 +1,10 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart'; // Added
+import 'package:http/http.dart' as http; // Added
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -13,6 +17,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // Firebase instances
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ImagePicker _picker = ImagePicker(); // Image Picker instance
 
   // Controllers to handle user input
   final TextEditingController _firstNameController = TextEditingController();
@@ -22,6 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // State variables
   bool _isLoading = true;
+  bool _isUploadingImage = false; // To show spinner on avatar during upload
   bool _isEmailVerified = false;
   String? _profileImageUrl;
 
@@ -45,13 +51,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       User? user = _auth.currentUser;
       if (user != null) {
-        // Get Auth data
         setState(() {
           _isEmailVerified = user.emailVerified;
           _emailController.text = user.email ?? "";
         });
 
-        // Get Firestore data (assuming collection is 'users' and doc is uid)
         DocumentSnapshot userDoc = await _firestore
             .collection('users')
             .doc(user.uid)
@@ -64,7 +68,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             _firstNameController.text = data['firstName'] ?? "";
             _lastNameController.text = data['lastName'] ?? "";
             _phoneController.text = data['phone'] ?? "";
-            _profileImageUrl = data['photoUrl']; // optional
+            _profileImageUrl = data['photoUrl'];
           });
         }
       }
@@ -84,7 +88,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 2. Update Data to Firebase
+  // 2. Update Data to Firebase (Text Data)
   Future<void> _updateUserData() async {
     User? user = _auth.currentUser;
     if (user == null) return;
@@ -94,8 +98,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'firstName': _firstNameController.text.trim(),
         'lastName': _lastNameController.text.trim(),
         'phone': _phoneController.text.trim(),
-        'email': _emailController.text
-            .trim(), // Optional: updating email in firestore only
+        'email': _emailController.text.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -106,13 +109,102 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        // Remove focus to hide keyboard
         FocusScope.of(context).unfocus();
       }
     } catch (e) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Failed to update: $e")));
+    }
+  }
+
+  // 3. Pick Image and Upload to Cloudinary
+  Future<void> _pickAndUploadImage() async {
+    try {
+      // Pick image from gallery
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+      ); // Compress slightly
+
+      if (pickedFile == null) return; // User cancelled
+
+      setState(() {
+        _isUploadingImage = true;
+      });
+
+      File imageFile = File(pickedFile.path);
+
+      // Upload to Cloudinary
+      String? imageUrl = await _uploadToCloudinary(imageFile);
+
+      if (imageUrl != null) {
+        // Update Firestore with new Image URL
+        User? user = _auth.currentUser;
+        if (user != null) {
+          await _firestore.collection('users').doc(user.uid).update({
+            'photoUrl': imageUrl,
+          });
+
+          setState(() {
+            _profileImageUrl = imageUrl;
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Photo updated!"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error uploading image: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error uploading image: $e")));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingImage = false;
+        });
+      }
+    }
+  }
+
+  // 4. Cloudinary Upload Logic
+  Future<String?> _uploadToCloudinary(File image) async {
+    // TODO: Replace with your Cloudinary Credentials
+    const String cloudName = "dm9b7873j";
+    const String uploadPreset = "rydeapp"; // Must be Unsigned
+
+    final url = Uri.parse(
+      'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
+    );
+
+    try {
+      final request = http.MultipartRequest('POST', url)
+        ..fields['upload_preset'] = uploadPreset
+        ..files.add(await http.MultipartFile.fromPath('file', image.path));
+
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        final responseData = await response.stream.toBytes();
+        final responseString = String.fromCharCodes(responseData);
+        final jsonMap = jsonDecode(responseString);
+        return jsonMap['secure_url']; // Return the hosted image URL
+      } else {
+        debugPrint('Cloudinary Upload Failed: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Cloudinary Error: $e');
+      return null;
     }
   }
 
@@ -123,7 +215,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F9), // Light grey background
+      backgroundColor: const Color(0xFFF5F6F9),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
@@ -142,7 +234,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: Color(0xFF333333),
                     ),
                   ),
-                  // Added a small Save button to trigger the update explicitly
                   TextButton(
                     onPressed: _updateUserData,
                     child: const Text("Save", style: TextStyle(fontSize: 16)),
@@ -177,20 +268,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fit: BoxFit.cover,
                         ),
                       ),
+                      // Add a loading indicator over the image while uploading
+                      child: _isUploadingImage
+                          ? Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black38,
+                              ),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                ),
+                              ),
+                            )
+                          : null,
                     ),
                     // Edit Icon (Camera/Gallery)
                     Positioned(
                       bottom: 5,
                       right: 5,
                       child: InkWell(
-                        onTap: () {
-                          // TODO: Implement Image Picker here
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Image Picker would open here"),
-                            ),
-                          );
-                        },
+                        onTap: _isUploadingImage ? null : _pickAndUploadImage,
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
@@ -233,29 +331,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // First Name
                     _buildProfileField(
                       label: "First name",
                       controller: _firstNameController,
                     ),
                     const SizedBox(height: 20),
-
-                    // Last Name
                     _buildProfileField(
                       label: "Last name",
                       controller: _lastNameController,
                     ),
                     const SizedBox(height: 20),
-
-                    // Email (Usually Read-only from Auth, but editable here if you want to sync to Firestore)
                     _buildProfileField(
                       label: "Email",
                       controller: _emailController,
-                      isReadOnly: true, // Keeping email read-only is safer
+                      isReadOnly: true,
                     ),
                     const SizedBox(height: 20),
 
-                    // Email Status (Custom Widget)
+                    // Email Status
                     const Text(
                       "Email status",
                       style: TextStyle(
@@ -319,8 +412,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // Phone Number
                     _buildProfileField(
                       label: "Phone number",
                       controller: _phoneController,
@@ -336,7 +427,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Helper widget to build the text fields consistently
   Widget _buildProfileField({
     required String label,
     required TextEditingController controller,
@@ -359,7 +449,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           controller: controller,
           readOnly: isReadOnly,
           keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
-          // Auto-save when user presses "Done" on keyboard
           onFieldSubmitted: (value) => _updateUserData(),
           style: const TextStyle(
             fontSize: 16,
@@ -368,24 +457,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFFF7F8FA), // Very light grey input fill
+            fillColor: const Color(0xFFF7F8FA),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 20,
               vertical: 16,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(30), // Rounded pills
+              borderRadius: BorderRadius.circular(30),
               borderSide: BorderSide.none,
             ),
-            // The suffix icon acts as a submit button visual cue
             suffixIcon: IconButton(
               icon: const Icon(
-                Icons.edit_document, // Edit icon
+                Icons.edit_document,
                 color: Colors.black54,
                 size: 20,
               ),
               onPressed: () {
-                // If we want the icon to trigger save:
                 _updateUserData();
               },
             ),

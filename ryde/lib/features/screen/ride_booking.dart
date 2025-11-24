@@ -116,6 +116,45 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     super.dispose();
   }
 
+  // --- FIRESTORE BOOKING LOGIC ---
+  Future<void> _saveBooking() async {
+    if (_selectedRide == null || _fromLatLng == null || _toLatLng == null)
+      return;
+
+    try {
+      await FirebaseFirestore.instance.collection('bookings').add({
+        'created_at': FieldValue.serverTimestamp(),
+        'status': 'confirmed',
+        'customer_id': _uuid
+            .v4(), // Or use FirebaseAuth current user ID if available
+        'driver_id': _selectedRide!.id,
+        'driver_name': _selectedRide!.driverName,
+        'price': _selectedRide!.price,
+        'vehicle': {
+          'type': _selectedRide!.vehicleType,
+          'description': _selectedRide!.carDescription,
+        },
+        'route': {
+          'pickup_address': _fromController.text,
+          'dropoff_address': _toController.text,
+          'pickup_lat': _fromLatLng!.latitude,
+          'pickup_lng': _fromLatLng!.longitude,
+          'dropoff_lat': _toLatLng!.latitude,
+          'dropoff_lng': _toLatLng!.longitude,
+          'distance_km': _tripDistanceKm,
+          'duration_mins': _tripDurationMins,
+        },
+      });
+    } catch (e) {
+      debugPrint("Error saving booking: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to save booking details")),
+        );
+      }
+    }
+  }
+
   // --- INDIAN FARE CALCULATION LOGIC ---
   double _calculateIndianFare(
     String vehicleType,
@@ -139,14 +178,17 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       perKm = 15.0;
       perMin = 1.5;
       minFare = 40.0;
-    } else {
-      // Default to Car
+    } else if (type.contains('car')) {
       baseFare = 50.0;
       perKm = 18.0;
       perMin = 2.0;
       minFare = 80.0;
+    } else {
+      baseFare = 200.0;
+      perKm = 25.0;
+      perMin = 3.0;
+      minFare = 500.0;
     }
-
     double total = baseFare + (distanceKm * perKm) + (timeMins * perMin);
     return total < minFare ? minFare : total;
   }
@@ -1398,10 +1440,44 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  "Confirm Ride",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                child: // Inside _buildRideDetailsSheet()
+                    // ...
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        // --- UPDATED ONPRESSED LOGIC ---
+                        onPressed: () async {
+                          setState(() => _isLoading = true); // Show loader
+
+                          // Save to Firestore
+                          await _saveBooking();
+
+                          setState(() {
+                            _isLoading = false; // Hide loader
+                            _isBookingSuccess = true;
+                            _refitMapWithDelay();
+                          });
+                        },
+                        // -------------------------------
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B82F6),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          "Confirm Ride",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                // ...
               ),
             ),
           ],
