@@ -6,7 +6,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class RideTrackingScreen extends StatefulWidget {
   final String bookingId;
@@ -24,7 +23,8 @@ class RideTrackingScreen extends StatefulWidget {
 
 class _RideTrackingScreenState extends State<RideTrackingScreen> {
   final Completer<GoogleMapController> _mapController = Completer();
-  final String _googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
+  final String _googleApiKey =
+      "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk"; // Ideally move this to a secure config
 
   // --- MAP STATE ---
   Set<Marker> _markers = {};
@@ -66,9 +66,17 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   }
 
   void _parseBookingData() {
-    final route = widget.bookingData['route'] ?? {};
-    _pickupLatLng = LatLng(route['pickup_lat'], route['pickup_lng']);
-    _dropoffLatLng = LatLng(route['dropoff_lat'], route['dropoff_lng']);
+    // UPDATED: Accessing data based on your specific structure
+    final route = widget.bookingData['route'] as Map<String, dynamic>? ?? {};
+
+    // Safely parse lat/lng as doubles
+    double pLat = (route['pickup_lat'] as num?)?.toDouble() ?? 0.0;
+    double pLng = (route['pickup_lng'] as num?)?.toDouble() ?? 0.0;
+    double dLat = (route['dropoff_lat'] as num?)?.toDouble() ?? 0.0;
+    double dLng = (route['dropoff_lng'] as num?)?.toDouble() ?? 0.0;
+
+    _pickupLatLng = LatLng(pLat, pLng);
+    _dropoffLatLng = LatLng(dLat, dLng);
     _pickupAddress = route['pickup_address'] ?? "Pickup Location";
     _dropoffAddress = route['dropoff_address'] ?? "Dropoff Location";
     _currentStatus = widget.bookingData['status'] ?? 'confirmed';
@@ -173,7 +181,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
 
     Set<Marker> newMarkers = {};
 
-    // Driver
+    // Driver Marker
     newMarkers.add(
       Marker(
         markerId: const MarkerId('driver'),
@@ -185,7 +193,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
       ),
     );
 
-    // Target
+    // Target Marker
     newMarkers.add(
       Marker(
         markerId: MarkerId(isPhase2 ? 'dropoff' : 'pickup'),
@@ -293,8 +301,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
             zoomControlsEnabled: false,
             myLocationButtonEnabled: false,
           ),
-
-          // Floating Back Button
           Positioned(
             top: 50,
             left: 20,
@@ -311,8 +317,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
               ),
             ),
           ),
-
-          // Bottom Sheet
           Align(
             alignment: Alignment.bottomCenter,
             child: _buildTrackingSheet(),
@@ -323,11 +327,17 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   }
 
   Widget _buildTrackingSheet() {
-    final vehicle = widget.bookingData['vehicle'] ?? {};
+    // UPDATED: Mapping based on your specific 'bookings' structure
+    final vehicle =
+        widget.bookingData['vehicle'] as Map<String, dynamic>? ?? {};
     final double price =
         (widget.bookingData['price'] as num?)?.toDouble() ?? 0.0;
+    final String vehicleDesc = vehicle['description'] ?? "Vehicle";
+    final String vehicleType = vehicle['type'] ?? "Car";
 
-    // Determine visual state
+    // Check if plate exists in case you add it later, otherwise fallback to Type
+    final String plateInfo = vehicle['plate'] ?? vehicleType.toUpperCase();
+
     bool isPickupPhase = _currentStatus != 'on_trip';
 
     return Container(
@@ -352,7 +362,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 1. Handle Bar
             Center(
               child: Container(
                 width: 40,
@@ -364,8 +373,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                 ),
               ),
             ),
-
-            // 2. Status & Time Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -403,19 +410,14 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                     ),
                   ],
                 ),
-                // Progress Indicator
                 _buildProgressIndicator(isPickupPhase),
               ],
             ),
-
             const SizedBox(height: 20),
             const Divider(height: 1),
             const SizedBox(height: 20),
-
-            // 3. Driver & Vehicle Profile
             Row(
               children: [
-                // Driver Photo
                 Container(
                   width: 60,
                   height: 60,
@@ -428,7 +430,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                // Details
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -474,8 +475,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                         ],
                       ),
                       const SizedBox(height: 4),
+                      // UPDATED: Uses 'description' field (e.g. "Black Model 3")
                       Text(
-                        "${vehicle['color'] ?? 'White'} ${vehicle['model'] ?? 'Toyota Camry'}",
+                        vehicleDesc,
                         style: TextStyle(color: Colors.grey[600], fontSize: 14),
                       ),
                       const SizedBox(height: 4),
@@ -489,7 +491,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          vehicle['plate_number'] ?? "MH 12 AB 1234",
+                          plateInfo, // Displays vehicle type or plate if available
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -502,10 +504,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                 ),
               ],
             ),
-
             const SizedBox(height: 20),
-
-            // 4. Action Grid
             Row(
               children: [
                 Expanded(
@@ -522,10 +521,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                 const SizedBox(width: 12),
               ],
             ),
-
             const SizedBox(height: 24),
-
-            // 5. Payment Info
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -553,6 +549,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                     ],
                   ),
                   const Spacer(),
+                  // UPDATED: Price mapping
                   Text(
                     "₹${price.toStringAsFixed(0)}",
                     style: const TextStyle(
@@ -564,10 +561,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
-
-            // 6. Bottom Action
             if (isPickupPhase)
               SizedBox(
                 width: double.infinity,
@@ -591,7 +585,6 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   }
 
   Widget _buildProgressIndicator(bool isPickupPhase) {
-    // Simple 3-dot progress visualization
     return Row(
       children: [
         _buildDot(true, "Confirmed"),
