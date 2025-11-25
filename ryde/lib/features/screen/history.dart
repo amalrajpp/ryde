@@ -87,18 +87,12 @@ class HistoryScreen extends StatelessWidget {
             // Filter Logic
             final ongoing = docs.where((d) {
               final s = (d['status'] ?? '').toString().toLowerCase();
-              return [
-                'confirmed',
-                'driver_assigned',
-                'on_way',
-                'started',
-                'on_trip',
-              ].contains(s);
+              return ['created', 'ongoing', 'started'].contains(s);
             }).toList();
 
             final history = docs.where((d) {
               final s = (d['status'] ?? '').toString().toLowerCase();
-              return ['completed', 'cancelled', 'paid'].contains(s);
+              return ['completed', 'cancelled', 'declined'].contains(s);
             }).toList();
 
             // 2. CLIENT-SIDE SORT SAFETY:
@@ -170,13 +164,14 @@ class HistoryScreen extends StatelessWidget {
         // Extract Vehicle Type safely
         final vehicleMap = data['vehicle'] as Map<String, dynamic>? ?? {};
         final vehicleType = vehicleMap['type'] ?? 'Car';
-
+        final status = (data['status'] ?? 'Pending').toString();
         return _RideCard(
           data: data,
           formattedDate: _formatDate(data['created_at'] as Timestamp?),
           seats: _getSeats(vehicleType),
           vehicleType: vehicleType,
           isHistory: isHistory,
+          status: status,
           onTrackPressed: () {
             if (!isHistory) {
               Navigator.push(
@@ -201,6 +196,7 @@ class _RideCard extends StatelessWidget {
   final String seats;
   final String vehicleType;
   final bool isHistory;
+  final String status;
   final VoidCallback onTrackPressed;
 
   const _RideCard({
@@ -211,6 +207,7 @@ class _RideCard extends StatelessWidget {
     required this.vehicleType,
     required this.isHistory,
     required this.onTrackPressed,
+    required this.status,
   });
 
   @override
@@ -383,12 +380,12 @@ class _RideCard extends StatelessWidget {
                 ),
               ),
               child: Text(
-                isHistory ? "View Summary" : "Track Ride",
+                isHistory ? status.toUpperCase() : "Track Ride",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: isHistory ? Colors.white : Colors.white,
+                  color: isHistory ? Colors.black : Colors.white,
                   letterSpacing: 0.5,
                 ),
               ),

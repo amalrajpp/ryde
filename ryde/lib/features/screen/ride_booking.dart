@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -122,11 +123,12 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       return;
 
     try {
+      final FirebaseAuth _auth = FirebaseAuth.instance;
+      final uid = _auth.currentUser!.uid;
       await FirebaseFirestore.instance.collection('bookings').add({
         'created_at': FieldValue.serverTimestamp(),
-        'status': 'confirmed',
-        'customer_id': _uuid
-            .v4(), // Or use FirebaseAuth current user ID if available
+        'status': 'created',
+        'customer_id': uid,
         'driver_id': _selectedRide!.id,
         'driver_name': _selectedRide!.driverName,
         'price': _selectedRide!.price,

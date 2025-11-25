@@ -41,7 +41,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   late String _dropoffAddress;
 
   // --- UI STATE ---
-  String _currentStatus = "confirmed";
+  String _currentStatus = "created";
   String _timeString = "-- min";
   String _distanceString = "-- km";
   String _statusMessage = "Connecting...";
@@ -79,7 +79,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
     _dropoffLatLng = LatLng(dLat, dLng);
     _pickupAddress = route['pickup_address'] ?? "Pickup Location";
     _dropoffAddress = route['dropoff_address'] ?? "Dropoff Location";
-    _currentStatus = widget.bookingData['status'] ?? 'confirmed';
+    _currentStatus = widget.bookingData['status'] ?? 'created';
   }
 
   // --- MARKERS & ICONS ---
@@ -141,7 +141,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
         .snapshots()
         .listen((snapshot) {
           if (snapshot.exists) {
-            final newStatus = snapshot.data()?['status'] ?? 'confirmed';
+            final newStatus = snapshot.data()?['status'] ?? 'created';
             if (newStatus != _currentStatus) {
               setState(() => _currentStatus = newStatus);
               if (_driverLocation != null) _updateMapState(_driverLocation!);
@@ -170,7 +170,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
 
   // --- MAP LOGIC ---
   void _updateMapState(LatLng driverPos) {
-    bool isPhase2 = _currentStatus == 'on_trip';
+    bool isPhase2 = _currentStatus == 'ongoing';
     LatLng targetLatLng = isPhase2 ? _dropoffLatLng : _pickupLatLng;
 
     setState(() {
@@ -338,7 +338,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
     // Check if plate exists in case you add it later, otherwise fallback to Type
     final String plateInfo = vehicle['plate'] ?? vehicleType.toUpperCase();
 
-    bool isPickupPhase = _currentStatus != 'on_trip';
+    bool isPickupPhase = _currentStatus != 'ongoing';
 
     return Container(
       width: double.infinity,
@@ -567,7 +567,54 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                 width: double.infinity,
                 height: 50,
                 child: TextButton(
-                  onPressed: () {},
+                  // UPDATED: Logic for Confirmation Dialog
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext ctx) {
+                        return AlertDialog(
+                          title: const Text("Cancel Ride"),
+                          content: const Text(
+                            "Are you sure you want to cancel this ride?",
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(ctx).pop(); // Close Dialog (No)
+                              },
+                              child: const Text("No"),
+                            ),
+                            TextButton(
+                              onPressed: () async {
+                                Navigator.of(ctx).pop(); // Close Dialog (Yes)
+
+                                try {
+                                  // Update backend
+                                  await FirebaseFirestore.instance
+                                      .collection('bookings')
+                                      .doc(widget.bookingId)
+                                      .update({'status': 'cancelled'});
+
+                                  if (mounted) {
+                                    Navigator.pop(context); // Close Screen
+                                  }
+                                } catch (e) {
+                                  debugPrint("Error cancelling ride: $e");
+                                }
+                              },
+                              child: const Text(
+                                "Yes",
+                                style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
                   child: const Text(
                     "Cancel Ride",
                     style: TextStyle(
@@ -587,7 +634,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   Widget _buildProgressIndicator(bool isPickupPhase) {
     return Row(
       children: [
-        _buildDot(true, "Confirmed"),
+        _buildDot(true, "created"),
         _buildLine(true),
         _buildDot(!isPickupPhase, "On Trip"),
         _buildLine(false),
