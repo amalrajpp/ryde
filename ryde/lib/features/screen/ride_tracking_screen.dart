@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ryde/features/screen/chat.dart';
 
 class RideTrackingScreen extends StatefulWidget {
   final String bookingId;
@@ -505,17 +507,46 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
               ],
             ),
             const SizedBox(height: 20),
+
+            // Inside _buildTrackingSheet...
             Row(
               children: [
                 Expanded(
-                  child: _buildActionButton(Icons.call, "Call", Colors.green),
+                  // Call Button (Placeholder logic)
+                  child: _buildActionButton(
+                    Icons.call,
+                    "Call",
+                    Colors.green,
+                    () {},
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
+                  // --- UPDATED MESSAGE BUTTON ---
                   child: _buildActionButton(
                     Icons.message,
                     "Message",
                     Colors.blue,
+                    () {
+                      // Get current User ID (The Passenger)
+                      final String currentUserId =
+                          FirebaseAuth.instance.currentUser?.uid ??
+                          "unknown_user";
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChatScreen(
+                            orderId: widget.bookingId,
+                            senderId: currentUserId, // Sender is ME (The User)
+                            receiverId: widget
+                                .bookingData['driver_id'], // Receiver is DRIVER
+                            receiverName:
+                                widget.bookingData['driver_name'] ?? "Driver",
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -666,9 +697,15 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, Color color) {
+  Widget _buildActionButton(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap, // <--- ADD THIS PARAMETER
+  ) {
     return InkWell(
-      onTap: () {},
+      onTap: onTap, // <--- USE IT HERE
+      borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ryde/features/screen/login_page.dart';
@@ -49,29 +50,37 @@ class _SignUpPageState extends State<SignUpPage> {
 
     try {
       // 1. Create the user in Firebase Auth
-      UserCredential userCredential =
-          await _auth.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+
+      final user = userCredential.user;
+      if (user == null) return;
+
+      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
+        "email": _emailController.text.trim(),
+        "createdAt": FieldValue.serverTimestamp(),
+        "updatedAt": FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)); // merge avoids overwrite
 
       // 2. Update the user's profile with their name
       await userCredential.user?.updateDisplayName(_nameController.text.trim());
-      
+
       // Optional: You might want to save the user to Firestore here as well
 
       if (!mounted) return;
 
       // 3. Handle success
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sign up successful!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sign up successful!')));
 
       // Example: Navigate to a home page after success
       // Navigator.of(context).pushReplacement(
       //   MaterialPageRoute(builder: (context) => HomePage()),
       // );
-      
     } on FirebaseAuthException catch (e) {
       // 4. Handle errors
       String message;
@@ -84,9 +93,9 @@ class _SignUpPageState extends State<SignUpPage> {
       } else {
         message = 'An error occurred. Please try again.';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       // Handle any other errors
       ScaffoldMessenger.of(context).showSnackBar(
@@ -229,14 +238,15 @@ class _SignUpPageState extends State<SignUpPage> {
             // ---------------- SIGN UP BUTTON ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
-              child: GestureDetector( // <-- MODIFIED: Was Container
+              child: GestureDetector(
+                // <-- MODIFIED: Was Container
                 onTap: _isLoading ? null : _signUp, // <-- ADDED: Tap handler
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   decoration: BoxDecoration(
                     // <-- ADDED: Visual loading feedback
-                    color: _isLoading ? Colors.blue.shade200 : Colors.blue, 
+                    color: _isLoading ? Colors.blue.shade200 : Colors.blue,
                     borderRadius: BorderRadius.circular(30),
                   ),
                   alignment: Alignment.center,
@@ -265,7 +275,7 @@ class _SignUpPageState extends State<SignUpPage> {
             const SizedBox(height: 20),
 
             Padding(
-               padding: const EdgeInsets.only(left: 8.0,right: 8.8),
+              padding: const EdgeInsets.only(left: 8.0, right: 8.8),
               child: Row(
                 children: [
                   Expanded(
@@ -331,12 +341,14 @@ class _SignUpPageState extends State<SignUpPage> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                          onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginPage()),
-        );
-      },
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const LoginPage(),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

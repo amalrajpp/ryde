@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class HomeViewModel {
-  String username = "John";
+  String username = "Amal";
   TextEditingController searchController = TextEditingController();
   int navIndex = 0;
 

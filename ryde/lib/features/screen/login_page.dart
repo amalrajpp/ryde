@@ -25,22 +25,20 @@ class _LoginPageState extends State<LoginPage> {
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Login successful")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Login successful")));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Login failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Login failed: $e")));
     }
   }
 
   // ---------------- GOOGLE LOGIN (v6.2.1) ----------------
   Future<void> loginWithGoogle() async {
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        scopes: ['email'],
-      );
+      final GoogleSignIn googleSignIn = GoogleSignIn(scopes: ['email']);
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
@@ -55,27 +53,28 @@ class _LoginPageState extends State<LoginPage> {
         idToken: googleAuth.idToken,
       );
 
-      final userCredential =await FirebaseAuth.instance.signInWithCredential(credential);
-            final user = userCredential.user;
-    if (user == null) return;
-
-        await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
-      "email": user.email,
-      "createdAt": FieldValue.serverTimestamp(),
-      "updatedAt": FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true)); // merge avoids overwrite
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Google login successful")),
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        credential,
       );
-         Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => HomePage()),
-    );
+      final user = userCredential.user;
+      if (user == null) return;
+
+      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
+        "email": user.email,
+        "createdAt": FieldValue.serverTimestamp(),
+        "updatedAt": FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)); // merge avoids overwrite
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Google login successful")));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Google login failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Google login failed: $e")));
       // ignore: avoid_print
       print(e);
     }
@@ -88,7 +87,6 @@ class _LoginPageState extends State<LoginPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // ---------------- TOP IMAGE WITH GRADIENT ----------------
             Stack(
               children: [
@@ -124,10 +122,7 @@ class _LoginPageState extends State<LoginPage> {
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 "Welcome 👋",
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
               ),
             ),
 
@@ -138,10 +133,7 @@ class _LoginPageState extends State<LoginPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 "Email",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
             ),
 
@@ -173,10 +165,7 @@ class _LoginPageState extends State<LoginPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 "Password",
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               ),
             ),
 
@@ -246,15 +235,15 @@ class _LoginPageState extends State<LoginPage> {
               child: Row(
                 children: [
                   Expanded(
-                      child:
-                          Divider(color: Colors.grey.shade300, thickness: 1)),
+                    child: Divider(color: Colors.grey.shade300, thickness: 1),
+                  ),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 10),
                     child: Text("Or"),
                   ),
                   Expanded(
-                      child:
-                          Divider(color: Colors.grey.shade300, thickness: 1)),
+                    child: Divider(color: Colors.grey.shade300, thickness: 1),
+                  ),
                 ],
               ),
             ),
@@ -312,12 +301,14 @@ class _LoginPageState extends State<LoginPage> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                                              onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const SignUpPage()),
-        );
-      },
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SignUpPage(),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

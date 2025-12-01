@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'ride_tracking_screen.dart';
@@ -23,6 +24,8 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final FirebaseAuth _auth = FirebaseAuth.instance;
+    final uid = _auth.currentUser!.uid;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -48,9 +51,7 @@ class HistoryScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(30),
               ),
               child: TabBar(
-                // 1. Makes the black bubble fill the exact width of the tab
                 indicatorSize: TabBarIndicatorSize.tab,
-                // 2. Removes the default bottom line found in newer Flutter versions
                 dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
                   color: Colors.black,
@@ -62,7 +63,6 @@ class HistoryScreen extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
-                // 3. Much cleaner tabs list
                 tabs: const [
                   Tab(text: "Ongoing"),
                   Tab(text: "History"),
@@ -74,7 +74,7 @@ class HistoryScreen extends StatelessWidget {
         body: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
               .collection('bookings')
-              // 1. QUERY SORT: Fetches data newest first from server
+              .where('customer_id', isEqualTo: uid)
               .orderBy('created_at', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
@@ -95,15 +95,12 @@ class HistoryScreen extends StatelessWidget {
               return ['completed', 'cancelled', 'declined'].contains(s);
             }).toList();
 
-            // 2. CLIENT-SIDE SORT SAFETY:
-            // Ensures strict order even during local updates (latency compensation)
-            // where 'created_at' might be momentarily null or unordered.
             int sortFunc(QueryDocumentSnapshot a, QueryDocumentSnapshot b) {
               Timestamp? t1 = a['created_at'] as Timestamp?;
               Timestamp? t2 = b['created_at'] as Timestamp?;
-              if (t1 == null) return -1; // Show pending writes at top
+              if (t1 == null) return -1;
               if (t2 == null) return 1;
-              return t2.compareTo(t1); // Descending
+              return t2.compareTo(t1);
             }
 
             ongoing.sort(sortFunc);
@@ -161,10 +158,10 @@ class HistoryScreen extends StatelessWidget {
         final data = docs[i].data() as Map<String, dynamic>;
         final id = docs[i].id;
 
-        // Extract Vehicle Type safely
         final vehicleMap = data['vehicle'] as Map<String, dynamic>? ?? {};
         final vehicleType = vehicleMap['type'] ?? 'Car';
         final status = (data['status'] ?? 'Pending').toString();
+
         return _RideCard(
           data: data,
           formattedDate: _formatDate(data['created_at'] as Timestamp?),
@@ -210,6 +207,291 @@ class _RideCard extends StatelessWidget {
     required this.status,
   });
 
+  void _showDeliveryDetails(BuildContext context) {
+    // Extract nested details safely
+    final pickupDetails = data['pickup_details'] as Map<String, dynamic>? ?? {};
+    final dropoffDetails =
+        data['dropoff_details'] as Map<String, dynamic>? ?? {};
+
+    // --- NEW: Extract Parcel Details ---
+    final parcelDetails = data['parcel_details'] as Map<String, dynamic>? ?? {};
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6, // Slightly increased to accommodate parcel
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "Delivery Details",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+
+              // PICKUP SECTION
+              _buildDetailSection(
+                title: "Pick-up Details",
+                icon: Icons.upload_rounded,
+                iconColor: Colors.blue,
+                details: pickupDetails,
+                defaultName: "Sender",
+              ),
+
+              const Divider(height: 40),
+
+              // DROPOFF SECTION
+              _buildDetailSection(
+                title: "Drop-off Details",
+                icon: Icons.download_rounded,
+                iconColor: Colors.red,
+                details: dropoffDetails,
+                defaultName: "Receiver",
+              ),
+
+              // --- NEW: PARCEL SECTION ---
+              if (parcelDetails.isNotEmpty) ...[
+                const Divider(height: 40),
+                _buildParcelSection(parcelDetails),
+              ],
+
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text(
+                    "Close",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- NEW HELPER: Parcel Details Section ---
+  Widget _buildParcelSection(Map<String, dynamic> details) {
+    final weight = details['weight_range']?.toString() ?? "Unknown Weight";
+    final type = details['type']?.toString() ?? "Parcel";
+    final description = details['description']?.toString() ?? "";
+    final dimensions = details['dimensions'] as Map<String, dynamic>? ?? {};
+
+    String dimText = "";
+    if (dimensions.isNotEmpty) {
+      final l = dimensions['l']?.toString() ?? "";
+      final w = dimensions['w']?.toString() ?? "";
+      final h = dimensions['h']?.toString() ?? "";
+      if (l.isNotEmpty && w.isNotEmpty && h.isNotEmpty) {
+        dimText = "$l x $w x $h cm";
+      }
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.inventory_2_rounded,
+            color: Colors.orange,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Parcel Details",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "$weight • $type",
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (dimText.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  "Dim: $dimText",
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+              ],
+              if (description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.description,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          description,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[800],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailSection({
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required Map<String, dynamic> details,
+    required String defaultName,
+  }) {
+    final name = details['name']?.toString() ?? defaultName;
+    final phone = details['phone']?.toString() ?? "No phone";
+    final building = details['building']?.toString() ?? "No building info";
+    final unit = details['unit']?.toString() ?? "";
+    final instructions = details['instructions']?.toString() ?? "";
+    final option = details['option']?.toString() ?? "Meet at curb";
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Phone: +91 $phone",
+                style: const TextStyle(fontSize: 14, color: Colors.black87),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [building, unit, option].where((e) => e.isNotEmpty).join(" • "),
+                style: const TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              if (instructions.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.notes, size: 16, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          instructions,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[800],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const String googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
@@ -221,16 +503,15 @@ class _RideCard extends StatelessWidget {
     final double lng = (route['pickup_lng'] as num?)?.toDouble() ?? 0.0;
 
     final String driverName = data['driver_name'] ?? "Unknown Driver";
-    final String status = (data['status'] ?? "Pending").toString();
+    final String statusStr = (data['status'] ?? "Pending").toString();
     final double price = (data['price'] as num?)?.toDouble() ?? 0.0;
 
-    // Logic for Payment Status
     bool isPaid =
-        status.toLowerCase() == 'completed' || status.toLowerCase() == 'paid';
+        statusStr.toLowerCase() == 'completed' ||
+        statusStr.toLowerCase() == 'paid';
     String paymentStatus = isPaid ? "Paid" : "Pending";
     Color paymentColor = isPaid ? Colors.green : Colors.orange;
 
-    // Map Image
     final String mapUrl =
         "https://maps.googleapis.com/maps/api/staticmap?center=$lat,$lng&zoom=14&size=160x160&markers=color:red%7C$lat,$lng&key=$googleApiKey";
 
@@ -301,7 +582,7 @@ class _RideCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // 2. INFO BOX (Restored Missing Fields)
+                // 2. INFO BOX
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -319,7 +600,6 @@ class _RideCard extends StatelessWidget {
                       const Divider(height: 16, color: Color(0xFFEEEEEE)),
                       _buildDetailRow("Driver", driverName),
                       const Divider(height: 16, color: Color(0xFFEEEEEE)),
-                      // Payment Status Row with Price
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -357,12 +637,46 @@ class _RideCard extends StatelessWidget {
                     ],
                   ),
                 ),
+
+                // --- NEW BUTTON: View Delivery Details ---
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 40,
+                  child: OutlinedButton(
+                    onPressed: () => _showDeliveryDetails(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black87,
+                      side: BorderSide(color: Colors.grey.shade300),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.visibility_outlined, size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          "View Delivery Details",
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // ----------------------------------------
               ],
             ),
           ),
 
-          // 3. TRACK / SUMMARY BUTTON
+          // 3. ACTIONS AREA
           const Divider(height: 1, color: Color(0xFFEEEEEE)),
+
+          // Track Ride Button
           InkWell(
             onTap: isHistory ? null : onTrackPressed,
             borderRadius: const BorderRadius.only(
@@ -380,7 +694,7 @@ class _RideCard extends StatelessWidget {
                 ),
               ),
               child: Text(
-                isHistory ? status.toUpperCase() : "Track Ride",
+                isHistory ? statusStr.toUpperCase() : "Track Ride",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
@@ -396,7 +710,6 @@ class _RideCard extends StatelessWidget {
     );
   }
 
-  // Helper for Info Rows
   Widget _buildDetailRow(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -421,7 +734,6 @@ class _RideCard extends StatelessWidget {
     );
   }
 
-  // Helper for Address Rows
   Widget _buildLocationRow(IconData icon, String text, Color iconColor) {
     return Row(
       children: [
