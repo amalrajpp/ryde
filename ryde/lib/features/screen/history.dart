@@ -75,7 +75,7 @@ class HistoryScreen extends StatelessWidget {
           stream: FirebaseFirestore.instance
               .collection('booking')
               .where('customer_id', isEqualTo: uid)
-              .orderBy('created_at', descending: true)
+              //.orderBy('created_at', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
@@ -87,7 +87,7 @@ class HistoryScreen extends StatelessWidget {
             // Filter Logic
             final ongoing = docs.where((d) {
               final s = (d['status'] ?? '').toString().toLowerCase();
-              return ['created', 'ongoing', 'started'].contains(s);
+              return ['created', 'accepted', 'started'].contains(s);
             }).toList();
 
             final history = docs.where((d) {
