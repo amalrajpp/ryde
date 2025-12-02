@@ -138,7 +138,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   // --- LISTENERS ---
   void _listenToBookingStatus() {
     _bookingSubscription = FirebaseFirestore.instance
-        .collection('bookings')
+        .collection('booking')
         .doc(widget.bookingId)
         .snapshots()
         .listen((snapshot) {
@@ -329,7 +329,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
   }
 
   Widget _buildTrackingSheet() {
-    // UPDATED: Mapping based on your specific 'bookings' structure
+    // UPDATED: Mapping based on your specific 'booking' structure
     final vehicle =
         widget.bookingData['vehicle'] as Map<String, dynamic>? ?? {};
     final double price =
@@ -622,7 +622,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
                                 try {
                                   // Update backend
                                   await FirebaseFirestore.instance
-                                      .collection('bookings')
+                                      .collection('booking')
                                       .doc(widget.bookingId)
                                       .update({'status': 'cancelled'});
 

@@ -73,7 +73,7 @@ class HistoryScreen extends StatelessWidget {
         ),
         body: StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
-              .collection('bookings')
+              .collection('booking')
               .where('customer_id', isEqualTo: uid)
               .orderBy('created_at', descending: true)
               .snapshots(),

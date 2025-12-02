@@ -201,7 +201,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       // We do NOT save driver_id yet. We wait for a driver to update it.
       print("booking ride for ${_selectedVehicleType!.vehicleType}");
       DocumentReference ref = await FirebaseFirestore.instance
-          .collection('bookings')
+          .collection('booking')
           .add({
             'created_at': FieldValue.serverTimestamp(),
             'status': 'pending', // Waiting for driver

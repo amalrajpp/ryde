@@ -32,7 +32,7 @@ class _ChatScreenState extends State<ChatScreen> {
     await _firestore
         .collection(
           'orders',
-        ) // Ensure this matches your collection name ('bookings' or 'orders')
+        ) // Ensure this matches your collection name ('booking' or 'orders')
         .doc(widget.orderId)
         .collection('messages')
         .add({
