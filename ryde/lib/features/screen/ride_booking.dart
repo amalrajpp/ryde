@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ryde/services/place_service.dart'; // Ensure this path matches your project
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http; // Added for Notification Server
 
 // --- RIDE OPTION MODEL ---
 class RideOption {
@@ -245,6 +246,68 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     }
   }
 
+  // --- NEW: NOTIFICATION LOGIC ---
+  Future<void> _sendRadiusNotification(String vehicleType) async {
+    if (_fromLatLng == null) return;
+
+    final String serverUrl = "http://192.168.20.4:3000/send-multiple";
+    final double pickupLat = _fromLatLng!.latitude;
+    final double pickupLng = _fromLatLng!.longitude;
+
+    try {
+      // 1. Fetch drivers of specific vehicle type who are online
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection("drivers")
+          .where("vehicle.vehicle_type", isEqualTo: vehicleType)
+          .where("status", isEqualTo: "online")
+          .where("working", isEqualTo: "unassigned")
+          .get();
+
+      List<String> tokens = [];
+
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data();
+        if (data["fcmToken"] != null && data["location"] != null) {
+          final loc = data["location"];
+          double driverLat = (loc['lat'] as num).toDouble();
+          double driverLng = (loc['lng'] as num).toDouble();
+
+          // 2. Calculate Distance
+          double distanceInMeters = Geolocator.distanceBetween(
+            pickupLat,
+            pickupLng,
+            driverLat,
+            driverLng,
+          );
+
+          // 3. Filter drivers within 10km (10000 meters)
+          if (distanceInMeters <= 10000) {
+            tokens.add(data["fcmToken"]);
+          }
+        }
+      }
+
+      if (tokens.isEmpty) {
+        debugPrint("No drivers found within 10km radius for $vehicleType");
+        return;
+      }
+
+      // 4. Send to Node Server
+      await http.post(
+        Uri.parse(serverUrl),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "tokens": tokens,
+          "title": "New Ride Request",
+          "body": "New $vehicleType ride request within 10km!",
+        }),
+      );
+      debugPrint("Notification sent to ${tokens.length} drivers.");
+    } catch (e) {
+      debugPrint("Error sending notifications: $e");
+    }
+  }
+
   // --- 2. NEW: LISTEN FOR DRIVER ACCEPTANCE ---
   void _listenForDriverAcceptance(DocumentReference bookingRef) {
     _bookingSubscription = bookingRef.snapshots().listen((snapshot) {
@@ -382,6 +445,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     _driverSubscription = FirebaseFirestore.instance
         .collection('drivers')
         .where('status', isEqualTo: 'online')
+        .where('working', isEqualTo: 'unassigned')
         .snapshots()
         .listen((snapshot) {
           final Set<Marker> newMarkers = {};
@@ -975,6 +1039,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             stream: FirebaseFirestore.instance
                 .collection('drivers')
                 .where('status', isEqualTo: 'online')
+                .where('working', isEqualTo: 'unassigned')
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError)
@@ -1241,6 +1306,11 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                       final bookingRef = await _createRideRequest();
 
                       if (bookingRef != null) {
+                        // --- SEND NOTIFICATION TO NEARBY DRIVERS ---
+                        _sendRadiusNotification(
+                          _selectedVehicleType!.vehicleType,
+                        );
+
                         // Wait for a driver to accept
                         _listenForDriverAcceptance(bookingRef);
                       } else {
