@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart'; // Added
 import 'package:http/http.dart' as http; // Added
+import 'package:ryde/features/screen/redirect.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -208,6 +209,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // 5. Confirm logout dialog
+  void _confirmLogout() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _logout();
+            },
+            child: const Text('Yes', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 6. Perform logout and navigate to main redirect page
+  Future<void> _logout() async {
+    try {
+      await _auth.signOut();
+
+      if (!mounted) return;
+
+      // Remove all routes and go to MainPage which handles auth state
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainPage()),
+        (route) => false,
+      );
+    } catch (e) {
+      debugPrint('Logout failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -234,9 +281,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: Color(0xFF333333),
                     ),
                   ),
-                  TextButton(
-                    onPressed: _updateUserData,
-                    child: const Text("Save", style: TextStyle(fontSize: 16)),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: _updateUserData,
+                        child: const Text(
+                          "Save",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Logout button
+                      TextButton(
+                        onPressed: _confirmLogout,
+                        child: const Text(
+                          "Logout",
+                          style: TextStyle(fontSize: 16, color: Colors.red),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
