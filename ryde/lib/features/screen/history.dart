@@ -159,7 +159,7 @@ class HistoryScreen extends StatelessWidget {
         final id = docs[i].id;
 
         final vehicleMap = data['vehicle'] as Map<String, dynamic>? ?? {};
-        final vehicleType = vehicleMap['type'] ?? 'Car';
+        final vehicleType = vehicleMap['vehicle_type'] ?? 'Car';
         final status = (data['status'] ?? 'Pending').toString();
 
         return _RideCard(
