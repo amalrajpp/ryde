@@ -250,7 +250,9 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   Future<void> _sendRadiusNotification(String vehicleType) async {
     if (_fromLatLng == null) return;
 
-    final String serverUrl = "http://192.168.20.4:3000/send-multiple";
+    //final String serverUrl = "http://192.168.20.4:3000/send-multiple";
+    final String serverUrl =
+        "https://ryde-notifications.onrender.com/send-multiple";
     final double pickupLat = _fromLatLng!.latitude;
     final double pickupLng = _fromLatLng!.longitude;
 
