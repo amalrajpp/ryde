@@ -79,25 +79,33 @@ class _RecentRidesCardState extends State<RecentRidesCard> {
         final data = doc.data() as Map<String, dynamic>;
         final id = doc.id;
 
-        // Data Extraction
-        final vehicleMap = data['vehicle'] as Map<String, dynamic>? ?? {};
-        final vehicleType = vehicleMap['type'] ?? 'Car';
+        // --- UPDATED DATA EXTRACTION ---
+
+        // 1. Vehicle Type is at the root
+        final vehicleType = data['vehicle_type']?.toString() ?? 'Car';
+
+        // 2. Status is at root
         final status = (data['status'] ?? 'Pending').toString();
+
+        // 3. Addresses & Coords are inside 'route' map (Matches your latest screenshot)
         final route = data['route'] as Map<String, dynamic>? ?? {};
-        final String pickup = route['pickup_address'] ?? "Unknown";
-        final String dropoff = route['dropoff_address'] ?? "Unknown";
+        final String pickup = route['pickup_address'] ?? "Unknown Address";
+        final String dropoff = route['dropoff_address'] ?? "Unknown Address";
         final double lat = (route['pickup_lat'] as num?)?.toDouble() ?? 0.0;
         final double lng = (route['pickup_lng'] as num?)?.toDouble() ?? 0.0;
-        final String driverName = data['driver_name'] ?? "Unknown Driver";
+
+        // 4. Driver Details are inside 'driver_details' map
+        final driverDetails =
+            data['driver_details'] as Map<String, dynamic>? ?? {};
+        final String driverName = driverDetails['name'] ?? "Unknown Driver";
+
+        // 5. Price is at root
         final double price = (data['price'] as num?)?.toDouble() ?? 0.0;
+
+        // 6. Date
         final formattedDate = _formatDate(data['created_at'] as Timestamp?);
 
-        // Payment Logic
-        bool isPaid =
-            status.toLowerCase() == 'completed' ||
-            status.toLowerCase() == 'paid';
-        String paymentStatus = isPaid ? "Paid" : "Pending";
-        Color paymentColor = isPaid ? Colors.green : Colors.orange;
+        // --- END DATA EXTRACTION ---
 
         // Map URL
         const String googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
@@ -214,16 +222,7 @@ class _RecentRidesCardState extends State<RecentRidesCard> {
                               Row(
                                 children: [
                                   Text(
-                                    paymentStatus,
-                                    style: TextStyle(
-                                      color: paymentColor,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    "• ₹${price.toInt()}",
+                                    " ₹${price.toInt()}",
                                     style: const TextStyle(
                                       color: Colors.black,
                                       fontSize: 13,
@@ -287,7 +286,7 @@ class _RecentRidesCardState extends State<RecentRidesCard> {
                           ),
                         );
                       }
-                    : null, // Disable if completed/history
+                    : null,
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(24),
                   bottomRight: Radius.circular(24),
@@ -298,7 +297,7 @@ class _RecentRidesCardState extends State<RecentRidesCard> {
                   decoration: BoxDecoration(
                     color: isOngoing
                         ? const Color(0xFF3B82F6)
-                        : Colors.transparent, // Highlight only if trackable
+                        : Colors.transparent,
                     borderRadius: const BorderRadius.only(
                       bottomLeft: Radius.circular(24),
                       bottomRight: Radius.circular(24),
@@ -421,7 +420,7 @@ class _RecentRidesCardState extends State<RecentRidesCard> {
     );
   }
 
-  // --- Delivery Details Modal Logic (Copied from HistoryScreen) ---
+  // --- Delivery Details Modal Logic ---
   void _showDeliveryDetails(BuildContext context, Map<String, dynamic> data) {
     final pickupDetails = data['pickup_details'] as Map<String, dynamic>? ?? {};
     final dropoffDetails =

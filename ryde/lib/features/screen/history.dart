@@ -75,7 +75,6 @@ class HistoryScreen extends StatelessWidget {
           stream: FirebaseFirestore.instance
               .collection('booking')
               .where('customer_id', isEqualTo: uid)
-              //.orderBy('created_at', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
@@ -158,8 +157,8 @@ class HistoryScreen extends StatelessWidget {
         final data = docs[i].data() as Map<String, dynamic>;
         final id = docs[i].id;
 
-        final vehicleMap = data['vehicle'] as Map<String, dynamic>? ?? {};
-        final vehicleType = vehicleMap['vehicle_type'] ?? 'Car';
+        // FIXED: Vehicle type is at root level (Screenshot 2)
+        final vehicleType = data['vehicle_type']?.toString() ?? 'Car';
         final status = (data['status'] ?? 'Pending').toString();
 
         return _RideCard(
@@ -212,8 +211,6 @@ class _RideCard extends StatelessWidget {
     final pickupDetails = data['pickup_details'] as Map<String, dynamic>? ?? {};
     final dropoffDetails =
         data['dropoff_details'] as Map<String, dynamic>? ?? {};
-
-    // --- NEW: Extract Parcel Details ---
     final parcelDetails = data['parcel_details'] as Map<String, dynamic>? ?? {};
 
     showModalBottomSheet(
@@ -223,7 +220,7 @@ class _RideCard extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6, // Slightly increased to accommodate parcel
+        initialChildSize: 0.6,
         minChildSize: 0.4,
         maxChildSize: 0.9,
         expand: false,
@@ -270,7 +267,7 @@ class _RideCard extends StatelessWidget {
                 defaultName: "Receiver",
               ),
 
-              // --- NEW: PARCEL SECTION ---
+              // PARCEL SECTION
               if (parcelDetails.isNotEmpty) ...[
                 const Divider(height: 40),
                 _buildParcelSection(parcelDetails),
@@ -304,7 +301,7 @@ class _RideCard extends StatelessWidget {
     );
   }
 
-  // --- NEW HELPER: Parcel Details Section ---
+  // --- Parcel Details Section ---
   Widget _buildParcelSection(Map<String, dynamic> details) {
     final weight = details['weight_range']?.toString() ?? "Unknown Weight";
     final type = details['type']?.toString() ?? "Parcel";
@@ -496,21 +493,26 @@ class _RideCard extends StatelessWidget {
   Widget build(BuildContext context) {
     const String googleApiKey = "AIzaSyDfOLxaH9E5-hZ0RlPdclHVWv51Nx7hamk";
 
+    // --- FIXED DATA EXTRACTION ---
+
+    // 1. ROUTE MAP (Screenshot 4)
     final route = data['route'] as Map<String, dynamic>? ?? {};
     final String pickup = route['pickup_address'] ?? "Unknown";
     final String dropoff = route['dropoff_address'] ?? "Unknown";
     final double lat = (route['pickup_lat'] as num?)?.toDouble() ?? 0.0;
     final double lng = (route['pickup_lng'] as num?)?.toDouble() ?? 0.0;
 
-    final String driverName = data['driver_name'] ?? "Unknown Driver";
+    // 2. DRIVER DETAILS MAP (Screenshot 3)
+    final driverDetails = data['driver_details'] as Map<String, dynamic>? ?? {};
+    final String driverName = driverDetails['name'] ?? "Unknown Driver";
+
     final String statusStr = (data['status'] ?? "Pending").toString();
     final double price = (data['price'] as num?)?.toDouble() ?? 0.0;
 
+    // Is Paid Logic
     bool isPaid =
         statusStr.toLowerCase() == 'completed' ||
         statusStr.toLowerCase() == 'paid';
-    String paymentStatus = isPaid ? "Paid" : "Pending";
-    Color paymentColor = isPaid ? Colors.green : Colors.orange;
 
     final String mapUrl =
         "https://maps.googleapis.com/maps/api/staticmap?center=$lat,$lng&zoom=14&size=160x160&markers=color:red%7C$lat,$lng&key=$googleApiKey";
@@ -614,16 +616,7 @@ class _RideCard extends StatelessWidget {
                           Row(
                             children: [
                               Text(
-                                paymentStatus,
-                                style: TextStyle(
-                                  color: paymentColor,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                "• ₹${price.toInt()}",
+                                " ₹${price.toInt()}",
                                 style: const TextStyle(
                                   color: Colors.black,
                                   fontSize: 13,
@@ -638,7 +631,7 @@ class _RideCard extends StatelessWidget {
                   ),
                 ),
 
-                // --- NEW BUTTON: View Delivery Details ---
+                // --- View Delivery Details Button ---
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -668,7 +661,6 @@ class _RideCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // ----------------------------------------
               ],
             ),
           ),
