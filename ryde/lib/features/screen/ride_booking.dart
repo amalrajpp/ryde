@@ -322,42 +322,10 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       if (status == 'accepted' && data['driver_id'] != null) {
         _bookingSubscription?.cancel(); // Stop listening once found
 
-        // Extract driver details written by the Driver App
-        final driverData = data['driver_details'] ?? {};
-
-        // Create the Assigned Driver object from the live data
-        final matchedDriver = RideOption(
-          id: data['driver_id'],
-          driverName: driverData['name'] ?? "Ryde Driver",
-          rating: (driverData['rating'] as num?)?.toDouble() ?? 5.0,
-          price:
-              (data['price'] as num?)?.toDouble() ??
-              _selectedVehicleType!.price,
-          time: "Arriving",
-          seats: "",
-          carImage: _selectedVehicleType?.carImage ?? 'assets/images/car.png',
-          driverImage:
-              driverData['image'] ??
-              'https://i.pravatar.cc/150?u=${data['driver_id']}',
-          carDescription: driverData['car_model'] ?? "Vehicle",
-          vehicleNumber: driverData['plate_number'] ?? "",
-          driverLocation: LatLng(
-            (data['driver_location_lat'] as num?)?.toDouble() ??
-                _fromLatLng!.latitude,
-            (data['driver_location_lng'] as num?)?.toDouble() ??
-                _fromLatLng!.longitude,
-          ),
-          vehicleType: data['vehicle_type'] ?? 'car',
-          displayTitle: "On the way",
-        );
-
-        setState(() {
-          _assignedDriver = matchedDriver;
-          _isFindingDriver = false; // Remove loading screen
-          // Update route to show driver approaching
-          _drawRoute(_assignedDriver!.driverLocation);
-          _refitMapWithDelay();
-        });
+        // Redirect to home page immediately when driver accepts
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
       }
     });
   }
@@ -1742,10 +1710,15 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                         child: TextField(
                           controller: phoneCtrl,
                           keyboardType: TextInputType.phone,
+                          maxLength: 10,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             prefixText: "+91 ",
                             hintText: "00000 00000",
+                            counterText: '',
                           ),
                         ),
                       ),
