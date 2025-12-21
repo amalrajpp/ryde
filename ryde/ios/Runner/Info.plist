@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSContactsUsageDescription</key>
+	<string>We need access to your contacts to add emergency contacts for SOS feature</string>
 </dict>
 </plist>

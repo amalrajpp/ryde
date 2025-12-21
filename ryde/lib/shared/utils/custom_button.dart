@@ -51,10 +51,11 @@ class CustomButton extends StatelessWidget {
                   text: buttonName,
                   maxLines: 2,
                   textAlign: TextAlign.center,
-                  //textStyle: AppTextStyle.boldStyle().copyWith(
-                  //  color: textColor ?? AppColors.buttonTextColor,
-                  //  fontSize: textSize ?? 16,
-                  //),
+                  textStyle: TextStyle(
+                    color: textColor ?? AppColors.buttonTextColor,
+                    fontSize: textSize ?? 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 )
               : SizedBox(
                   height: size.width * 0.05,

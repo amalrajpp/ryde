@@ -396,7 +396,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               'assets/images/car.png',
           driverImage:
               driverData['image'] ??
-              'https://i.pravatar.cc/150?u=${data['driver_id']}',
+              "https://upload.wikimedia.org/wikipedia/commons/a/ac/Default_pfp.jpg",
           carDescription: driverData['car_model'] ?? "Vehicle",
           vehicleNumber: driverData['plate_number'] ?? "",
           driverLocation: LatLng(
@@ -623,7 +623,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             carImage: driverData['car_image'] ?? 'assets/images/car.png',
             driverImage:
                 driverData['image'] ??
-                'https://i.pravatar.cc/150?u=${data['driver_id']}',
+                "https://upload.wikimedia.org/wikipedia/commons/a/ac/Default_pfp.jpg",
             carDescription: driverData['car_model'] ?? '',
             driverLocation: LatLng(dLatVal, dLngVal),
             vehicleType: data['vehicle_type'] ?? 'car',
@@ -1690,8 +1690,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                       time: "$timeMins min away",
                       seats: "",
                       carImage: carImage,
-                      driverImage:
-                          'https://i.pravatar.cc/150?u=${nearestDriverDoc.id}',
+                      driverImage: data['avatar'] ?? 'assets/images/driver.png',
                       carDescription:
                           "${vehicle['color'] ?? ''} ${vehicle['model'] ?? ''}",
                       vehicleNumber: plate,

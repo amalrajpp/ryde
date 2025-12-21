@@ -5,6 +5,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:get/get.dart';
 import 'package:ryde/features/auth/controllers/auth_controller.dart';
 import 'package:ryde/features/home/view/home_page.dart';
+import 'package:ryde/features/auth/views/login_page.dart';
+import 'package:ryde/features/auth/views/signup.dart';
 
 class GetStartedPage extends StatefulWidget {
   const GetStartedPage({super.key});
@@ -180,15 +182,56 @@ class _GetStartedPageState extends State<GetStartedPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  "Don’t have an account?",
+                  "Don't have an account?",
                   style: TextStyle(color: Colors.grey.shade900),
                 ),
                 const SizedBox(width: 5),
-                const Text(
-                  "Log in",
-                  style: TextStyle(
-                    color: Colors.blue,
-                    fontWeight: FontWeight.w900,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SignUpPage(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    "Sign up",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 15),
+
+            // Add Log In Link
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  "Already have an account?",
+                  style: TextStyle(color: Colors.grey.shade900),
+                ),
+                const SizedBox(width: 5),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LoginPage(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    "Log in",
+                    style: TextStyle(
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],

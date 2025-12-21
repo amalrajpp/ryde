@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:ryde/features/auth/views/login_page.dart';
+import 'package:ryde/features/home/view/home_page.dart';
 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
@@ -19,6 +21,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   // --- END: Added State variables ---
 
   // --- ADDED: Dispose controllers ---
@@ -59,30 +62,45 @@ class _SignUpPageState extends State<SignUpPage> {
       final user = userCredential.user;
       if (user == null) return;
 
-      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
-        "email": _emailController.text.trim(),
-        "createdAt": FieldValue.serverTimestamp(),
-        "updatedAt": FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)); // merge avoids overwrite
-
       // 2. Update the user's profile with their name
-      await userCredential.user?.updateDisplayName(_nameController.text.trim());
+      await user.updateDisplayName(_nameController.text.trim());
 
-      // Optional: You might want to save the user to Firestore here as well
+      // 3. Parse firstName and lastName from the full name
+      String firstName = '';
+      String lastName = '';
+      final nameParts = _nameController.text.trim().split(' ');
+      if (nameParts.isNotEmpty) {
+        firstName = nameParts.first;
+        if (nameParts.length > 1) {
+          lastName = nameParts.sublist(1).join(' ');
+        }
+      }
+
+      // 4. Save user data to Firestore (same structure as Google sign-in)
+      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
+        'firstName': firstName,
+        'lastName': lastName,
+        'photoUrl': user.photoURL ?? '',
+        'phone': user.phoneNumber ?? '',
+        'email': _emailController.text.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)); // merge avoids overwrite
 
       if (!mounted) return;
 
-      // 3. Handle success
+      // 5. Handle success
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Sign up successful!')));
 
-      // Example: Navigate to a home page after success
-      // Navigator.of(context).pushReplacement(
-      //   MaterialPageRoute(builder: (context) => HomePage()),
-      // );
+      // Navigate to login page
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+      );
     } on FirebaseAuthException catch (e) {
-      // 4. Handle errors
+      // 6. Handle errors
       String message;
       if (e.code == 'weak-password') {
         message = 'The password provided is too weak.';
@@ -102,7 +120,7 @@ class _SignUpPageState extends State<SignUpPage> {
         SnackBar(content: Text('An unexpected error occurred: $e')),
       );
     } finally {
-      // 5. Always turn off loading state
+      // 7. Always turn off loading state
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -111,6 +129,85 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
   // --- END: Added Sign-up logic ---
+
+  // ---------------- GOOGLE SIGN-UP ----------------
+  Future<void> signUpWithGoogle() async {
+    setState(() {
+      _isGoogleLoading = true;
+    });
+
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn(scopes: ['email']);
+
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        setState(() {
+          _isGoogleLoading = false;
+        });
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
+      final user = userCredential.user;
+      if (user == null) return;
+
+      // Extract name parts from the Google account display name
+      String gFirst = '';
+      String gLast = '';
+      if (user.displayName != null && user.displayName!.isNotEmpty) {
+        final parts = user.displayName!.trim().split(' ');
+        gFirst = parts.first;
+        if (parts.length > 1) gLast = parts.sublist(1).join(' ');
+      }
+
+      // Save user data to Firestore
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'firstName': gFirst,
+        'lastName': gLast,
+        'photoUrl': user.photoURL ?? googleUser.photoUrl ?? '',
+        'phone': user.phoneNumber ?? '',
+        'email': user.email ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Google sign-up successful")),
+      );
+
+      // Navigate to home page
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Google sign-up failed: $e")));
+      // ignore: avoid_print
+      print(e);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGoogleLoading = false;
+        });
+      }
+    }
+  }
+  // --- END: Google Sign-up ---
 
   @override
   Widget build(BuildContext context) {
@@ -297,26 +394,40 @@ class _SignUpPageState extends State<SignUpPage> {
             // ---------------- GOOGLE SIGN IN BUTTON ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.network(
-                      "https://developers.google.com/identity/images/g-logo.png",
-                      height: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      "Log In with Google",
-                      style: TextStyle(fontSize: 15),
-                    ),
-                  ],
+              child: GestureDetector(
+                onTap: _isGoogleLoading ? null : signUpWithGoogle,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.grey.shade300),
+                    color: _isGoogleLoading
+                        ? Colors.grey.shade100
+                        : Colors.white,
+                  ),
+                  child: _isGoogleLoading
+                      ? const Center(
+                          child: SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.network(
+                              "https://developers.google.com/identity/images/g-logo.png",
+                              height: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              "Sign Up with Google",
+                              style: TextStyle(fontSize: 15),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ),

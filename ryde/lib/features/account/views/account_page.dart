@@ -60,7 +60,7 @@ class _AccountModulePageState extends State<AccountModulePage> {
         final last = (data['lastName'] ?? '').toString();
         final name = (first.isNotEmpty || last.isNotEmpty)
             ? ('$first ${last}'.trim())
-            : (authUser.displayName ?? 'John Doe');
+            : (authUser.displayName ?? '');
         final email =
             (data['email'] ?? authUser.email ?? 'john.doe@example.com')
                 .toString();
@@ -84,7 +84,7 @@ class _AccountModulePageState extends State<AccountModulePage> {
         // Firestore doc not found - use auth fallback
         setState(() {
           _user = AccountUser(
-            name: authUser.displayName ?? 'John Doe',
+            name: authUser.displayName ?? '',
             mobile: authUser.phoneNumber ?? '+1 555-123-4567',
             email: authUser.email ?? 'john.doe@example.com',
             profileImage: authUser.photoURL,
@@ -107,7 +107,7 @@ class _AccountModulePageState extends State<AccountModulePage> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     // Use fetched user data or fall back to provided user or dummy values
-    final name = _user?.name ?? widget.user?.name ?? 'John Doe';
+    final name = _user?.name ?? widget.user?.name ?? '';
     final mobile = _user?.mobile ?? widget.user?.mobile ?? '+1 555-123-4567';
     final email = _user?.email ?? widget.user?.email ?? 'john.doe@example.com';
 
@@ -157,10 +157,7 @@ class _AccountModulePageState extends State<AccountModulePage> {
                             _user?.profileImage ?? widget.user?.profileImage,
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                AccountModuleProfilePage(user: _user),
-                          ),
+                          MaterialPageRoute(builder: (_) => ProfileScreen()),
                         ),
                       ),
                       ModuleMenuOptions(
