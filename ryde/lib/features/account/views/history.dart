@@ -2,10 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'ride_tracking_screen.dart';
+import 'package:ryde/features/ride/views/ride_tracking_screen.dart';
 
-class HistoryScreen extends StatelessWidget {
-  const HistoryScreen({super.key});
+class AccountModuleHistoryPage extends StatelessWidget {
+  const AccountModuleHistoryPage({super.key});
 
   // Helper: Calculate seats
   String _getSeats(String? vehicleType) {
@@ -196,7 +196,6 @@ class _RideCard extends StatelessWidget {
   final VoidCallback onTrackPressed;
 
   const _RideCard({
-    super.key,
     required this.data,
     required this.formattedDate,
     required this.seats,
@@ -508,11 +507,6 @@ class _RideCard extends StatelessWidget {
 
     final String statusStr = (data['status'] ?? "Pending").toString();
     final double price = (data['price'] as num?)?.toDouble() ?? 0.0;
-
-    // Is Paid Logic
-    bool isPaid =
-        statusStr.toLowerCase() == 'completed' ||
-        statusStr.toLowerCase() == 'paid';
 
     final String mapUrl =
         "https://maps.googleapis.com/maps/api/staticmap?center=$lat,$lng&zoom=14&size=160x160&markers=color:red%7C$lat,$lng&key=$googleApiKey";

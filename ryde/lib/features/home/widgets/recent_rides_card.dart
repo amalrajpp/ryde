@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../screen/ride_tracking_screen.dart';
+import 'package:ryde/features/ride/views/ride_booking.dart';
 
 class RecentRidesCard extends StatefulWidget {
   const RecentRidesCard({super.key});
@@ -112,210 +112,227 @@ class _RecentRidesCardState extends State<RecentRidesCard> {
         final String mapUrl =
             "https://maps.googleapis.com/maps/api/staticmap?center=$lat,$lng&zoom=14&size=160x160&markers=color:red%7C$lat,$lng&key=$googleApiKey";
 
-        // Logic to determine if "Track Ride" should be enabled
+        // Logic to determine if the ride should be resumable.
+        // Keep this list in-sync with HomePage's auto-resume statuses.
         bool isOngoing = [
+          'pending',
           'created',
           'accepted',
           'started',
+          'in_progress',
           'ongoing',
         ].contains(status.toLowerCase());
 
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // 1. Map & Addresses
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            color: Colors.grey[100],
-                            image: DecorationImage(
-                              image: NetworkImage(mapUrl),
-                              fit: BoxFit.cover,
-                              onError: (_, __) {},
+        return GestureDetector(
+          onTap: isOngoing
+              ? () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          RideBookingScreen(bookingId: id, bookingData: data),
+                    ),
+                  );
+                }
+              : null,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      // 1. Map & Addresses
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: Colors.grey[100],
+                              image: DecorationImage(
+                                image: NetworkImage(mapUrl),
+                                fit: BoxFit.cover,
+                                onError: (_, __) {},
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildLocationRow(
-                                Icons.my_location,
-                                pickup,
-                                Colors.blue,
-                              ),
-                              Container(
-                                margin: const EdgeInsets.only(
-                                  left: 9,
-                                  top: 4,
-                                  bottom: 4,
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildLocationRow(
+                                  Icons.my_location,
+                                  pickup,
+                                  Colors.blue,
                                 ),
-                                height: 10,
-                                width: 1,
-                                color: Colors.grey[300],
-                              ),
-                              _buildLocationRow(
-                                Icons.location_on,
-                                dropoff,
-                                Colors.red,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 2. INFO BOX
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8F9FB),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildDetailRow("Date & Time", formattedDate),
-                          const Divider(height: 16, color: Color(0xFFEEEEEE)),
-                          _buildDetailRow(
-                            "Vehicle",
-                            "$vehicleType • ${_getSeats(vehicleType)}",
-                          ),
-                          const Divider(height: 16, color: Color(0xFFEEEEEE)),
-                          _buildDetailRow("Driver", driverName),
-                          const Divider(height: 16, color: Color(0xFFEEEEEE)),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                "Payment Status",
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Row(
-                                children: [
-                                  Text(
-                                    " ₹${price.toInt()}",
-                                    style: const TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                Container(
+                                  margin: const EdgeInsets.only(
+                                    left: 9,
+                                    top: 4,
+                                    bottom: 4,
                                   ),
-                                ],
-                              ),
-                            ],
+                                  height: 10,
+                                  width: 1,
+                                  color: Colors.grey[300],
+                                ),
+                                _buildLocationRow(
+                                  Icons.location_on,
+                                  dropoff,
+                                  Colors.red,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 16),
 
-                    // --- View Delivery Details Button ---
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 40,
-                      child: OutlinedButton(
-                        onPressed: () => _showDeliveryDetails(context, data),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.black87,
-                          side: BorderSide(color: Colors.grey.shade300),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                      // 2. INFO BOX
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8F9FB),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
                           children: [
-                            Icon(Icons.visibility_outlined, size: 16),
-                            SizedBox(width: 8),
-                            Text(
-                              "View Delivery Details",
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            _buildDetailRow("Date & Time", formattedDate),
+                            const Divider(height: 16, color: Color(0xFFEEEEEE)),
+                            _buildDetailRow(
+                              "Vehicle",
+                              "$vehicleType • ${_getSeats(vehicleType)}",
+                            ),
+                            const Divider(height: 16, color: Color(0xFFEEEEEE)),
+                            _buildDetailRow("Driver", driverName),
+                            const Divider(height: 16, color: Color(0xFFEEEEEE)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  "Payment Status",
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      " ₹${price.toInt()}",
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // 3. ACTIONS AREA (Bottom Button)
-              const Divider(height: 1, color: Color(0xFFEEEEEE)),
-              InkWell(
-                onTap: isOngoing
-                    ? () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => RideTrackingScreen(
-                              bookingId: id,
-                              bookingData: data,
+                      // --- View Delivery Details Button ---
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: OutlinedButton(
+                          onPressed: () => _showDeliveryDetails(context, data),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.black87,
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                        );
-                      }
-                    : null,
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(24),
-                  bottomRight: Radius.circular(24),
-                ),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  decoration: BoxDecoration(
-                    color: isOngoing
-                        ? const Color(0xFF3B82F6)
-                        : Colors.transparent,
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(24),
-                      bottomRight: Radius.circular(24),
-                    ),
-                  ),
-                  child: Text(
-                    isOngoing ? "Track Ride" : status.toUpperCase(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isOngoing ? Colors.white : Colors.black,
-                      letterSpacing: 0.5,
-                    ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.visibility_outlined, size: 16),
+                              SizedBox(width: 8),
+                              Text(
+                                "View Delivery Details",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+
+                // 3. ACTIONS AREA (Bottom Button)
+                const Divider(height: 1, color: Color(0xFFEEEEEE)),
+                InkWell(
+                  onTap: isOngoing
+                      ? () {
+                          // If ride is ongoing or active, open booking screen to restore state
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => RideBookingScreen(
+                                bookingId: id,
+                                bookingData: data,
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: isOngoing
+                          ? const Color(0xFF3B82F6)
+                          : Colors.transparent,
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(24),
+                        bottomRight: Radius.circular(24),
+                      ),
+                    ),
+                    child: Text(
+                      isOngoing ? "Resume Ride" : status.toUpperCase(),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: isOngoing ? Colors.white : Colors.black,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

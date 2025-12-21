@@ -3,23 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:ryde/features/account/views/account_page.dart';
+import 'package:ryde/features/account/views/history.dart';
+import 'package:ryde/features/ride/views/ride_booking.dart';
 
-import 'package:ryde/addata.dart';
-import 'package:ryde/features/car-screen/view/popularCarpage.dart';
 import 'package:ryde/features/home/view/home_content.dart';
 import 'package:ryde/features/home/viewmodel/home_viewmodel.dart';
 import 'package:ryde/features/home/widgets/bottom_navbar.dart';
-import 'package:ryde/features/screen/chat.dart';
-import 'package:ryde/features/screen/history.dart';
-import 'package:ryde/features/screen/profile.dart';
-import 'package:ryde/services/notification.dart';
-import '../widgets/home_header.dart';
-import '../widgets/search_bar.dart';
-import 'location_map.dart';
-import '../widgets/recent_rides_card.dart';
+// recent_rides_card is used inside home content; import removed here to avoid unused import warning
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  /// When set, HomePage will suppress auto-resume until this DateTime.
+  /// Use [suppressAutoResume] to set a temporary suppression when returning
+  /// from the booking screen so we don't immediately navigate back again.
+  static DateTime? _suppressAutoResumeUntil;
+
+  static void suppressAutoResume(Duration duration) {
+    _suppressAutoResumeUntil = DateTime.now().add(duration);
+  }
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -30,10 +33,8 @@ class _HomePageState extends State<HomePage> {
 
   final List<Widget> screens = const [
     HomeContentScreen(), // index 0
-    HistoryScreen(), // index 1
-    //SendNotificationScreen(driverId: "8TlDHLuhZRUChairmm5dCebUspL2"),
-    VehicleTypeNotificationScreen(),
-    ProfileScreen(),
+    AccountModuleHistoryPage(), // index 1
+    AccountModulePage(),
   ];
 
   @override
@@ -41,6 +42,57 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     // 1. Trigger the FCM setup when the Home Page loads
     _setupFCM();
+    // 2. Check for any active booking and resume if present
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkActiveBookingAndResume();
+    });
+  }
+
+  Future<void> _checkActiveBookingAndResume() async {
+    // If a recent navigation set suppression (for example user just returned
+    // from the booking screen), skip auto-resume for a short window.
+    if (HomePage._suppressAutoResumeUntil != null &&
+        DateTime.now().isBefore(HomePage._suppressAutoResumeUntil!)) {
+      return;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final qs = await FirebaseFirestore.instance
+          .collection('booking')
+          .where('customer_id', isEqualTo: user.uid)
+          .orderBy('created_at', descending: true)
+          .limit(1)
+          .get();
+
+      if (qs.docs.isEmpty) return;
+      final doc = qs.docs.first;
+      final data = doc.data();
+      final status = (data['status'] ?? '').toString().toLowerCase();
+
+      // Define active statuses that should trigger resume
+      const active = [
+        'pending',
+        'created',
+        'accepted',
+        'started',
+        'in_progress',
+        'ongoing',
+      ];
+      if (active.contains(status)) {
+        // Navigate to booking screen to resume
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                RideBookingScreen(bookingId: doc.id, bookingData: data),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error checking active booking: $e');
+    }
   }
 
   /// Requests permission, gets the token, and updates Firestore

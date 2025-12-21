@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ryde/features/home/view/home_page.dart';
-import 'package:ryde/features/screen/on_borading_screen.dart';
+import 'package:ryde/features/onboarding/views/on_boarding_screen.dart';
 
 class MainPage extends StatelessWidget {
   const MainPage({super.key});

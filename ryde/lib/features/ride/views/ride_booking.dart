@@ -1,17 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math'; // Used for generic calculations
+import 'dart:math'; // Used for random OTP generation
 import 'dart:ui' as ui;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ryde/services/place_service.dart'; // Ensure this path matches your project
+import 'package:ryde/shared/services/place_service.dart'; // Ensure this path matches your project
+import 'package:ryde/features/home/view/home_page.dart';
+import 'package:ryde/features/ride/views/ride_summary.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http; // Added for Notification Server
+import 'package:http/http.dart' as http;
 
 // --- RIDE OPTION MODEL ---
 class RideOption {
@@ -58,7 +60,10 @@ class RideOption {
 
 // --- MAIN SCREEN ---
 class RideBookingScreen extends StatefulWidget {
-  const RideBookingScreen({super.key});
+  final String? bookingId; // optional: open existing booking
+  final Map<String, dynamic>? bookingData;
+
+  RideBookingScreen({super.key, this.bookingId, this.bookingData});
 
   @override
   State<RideBookingScreen> createState() => _RideBookingScreenState();
@@ -123,8 +128,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   bool _showReviewScreen = false;
   bool _isEditingPickup = false;
   bool _isEditingDropoff = false;
-  bool _isFindingDriver =
-      false; // Displays the loader while waiting for driver acceptance
+  bool _isFindingDriver = false;
 
   bool _showRideList = false;
   RideOption? _selectedVehicleType;
@@ -140,9 +144,14 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
   BitmapDescriptor? _carIcon;
 
   // Streams
-  StreamSubscription? _driverSubscription; // Listens to all drivers on map
-  StreamSubscription?
-  _bookingSubscription; // Listens to the specific booking status
+  StreamSubscription? _driverSubscription;
+  StreamSubscription? _bookingSubscription;
+
+  // --- NEW: OTP & STATUS STATE ---
+  String? _pickupOtp;
+  String? _deliveryOtp;
+  String _currentRideStatus =
+      'pending'; // pending, accepted, started, in_progress, completed
 
   static const CameraPosition _kInitialPosition = CameraPosition(
     target: LatLng(37.7749, -122.4194),
@@ -165,12 +174,19 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     _determinePosition();
     _createCarMarker();
     _listenToDrivers();
+    // If opened with an existing booking id, load its state and resume listening
+    if (widget.bookingId != null) {
+      _loadExistingBooking(widget.bookingId!);
+    } else if (widget.bookingData != null) {
+      // If bookingData is provided without id, populate basic UI (no realtime listener)
+      _populateFromBookingData(widget.bookingData!);
+    }
   }
 
   @override
   void dispose() {
     _driverSubscription?.cancel();
-    _bookingSubscription?.cancel(); // Cancel the booking listener
+    _bookingSubscription?.cancel();
     _fromController.dispose();
     _toController.dispose();
     _senderNameController.dispose();
@@ -186,8 +202,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     super.dispose();
   }
 
-  // --- 1. MODIFIED: CREATE RIDE REQUEST (Broadcast) ---
-  // Returns the DocumentReference so we can listen to it.
+  // --- 1. MODIFIED: CREATE RIDE REQUEST (with OTPs) ---
   Future<DocumentReference?> _createRideRequest() async {
     if (_selectedVehicleType == null ||
         _fromLatLng == null ||
@@ -198,19 +213,44 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       final FirebaseAuth _auth = FirebaseAuth.instance;
       final uid = _auth.currentUser?.uid ?? "guest_user";
 
-      // We create a booking with 'pending' status.
-      // We do NOT save driver_id yet. We wait for a driver to update it.
+      // --- NEW: Generate 4-digit OTPs ---
+      final String pickupOtp = (1000 + Random().nextInt(9000)).toString();
+      final String deliveryOtp = (1000 + Random().nextInt(9000)).toString();
+
+      // Store locally for immediate UI update
+      setState(() {
+        _pickupOtp = pickupOtp;
+        _deliveryOtp = deliveryOtp;
+      });
+
       print("booking ride for ${_selectedVehicleType!.vehicleType}");
       DocumentReference ref = await FirebaseFirestore.instance
           .collection('booking')
           .add({
             'created_at': FieldValue.serverTimestamp(),
-            'status': 'pending', // Waiting for driver
+            'status': 'pending',
             'customer_id': uid,
             'driver_id': null,
             'price': _selectedVehicleType!.price,
-            'vehicle_type': _selectedVehicleType!
-                .vehicleType, // Important for driver filtering
+            'vehicle_type': _selectedVehicleType!.vehicleType,
+
+            // Persist full vehicle option so UI can be restored exactly
+            'vehicle_option': {
+              'id': _selectedVehicleType!.id,
+              'vehicle_type': _selectedVehicleType!.vehicleType,
+              'display_title': _selectedVehicleType!.displayTitle,
+              'price': _selectedVehicleType!.price,
+              'car_image': _selectedVehicleType!.carImage,
+              'driver_image': _selectedVehicleType!.driverImage,
+              'seats': _selectedVehicleType!.seats,
+              'description': _selectedVehicleType!.carDescription,
+              'max_weight': _selectedVehicleType!.maxWeight,
+              'max_dim': _selectedVehicleType!.maxDim,
+            },
+
+            // --- NEW: Add Security Fields ---
+            'security': {'pickup_otp': pickupOtp, 'delivery_otp': deliveryOtp},
+
             'route': {
               'pickup_address': _fromController.text,
               'dropoff_address': _toController.text,
@@ -246,18 +286,16 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     }
   }
 
-  // --- NEW: NOTIFICATION LOGIC ---
+  // --- NOTIFICATION LOGIC ---
   Future<void> _sendRadiusNotification(String vehicleType) async {
     if (_fromLatLng == null) return;
 
-    //final String serverUrl = "http://192.168.20.4:3000/send-multiple";
     final String serverUrl =
         "https://ryde-notifications.onrender.com/send-multiple";
     final double pickupLat = _fromLatLng!.latitude;
     final double pickupLng = _fromLatLng!.longitude;
 
     try {
-      // 1. Fetch drivers of specific vehicle type who are online
       final querySnapshot = await FirebaseFirestore.instance
           .collection("drivers")
           .where("vehicle.vehicle_type", isEqualTo: vehicleType)
@@ -274,7 +312,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
           double driverLat = (loc['lat'] as num).toDouble();
           double driverLng = (loc['lng'] as num).toDouble();
 
-          // 2. Calculate Distance
           double distanceInMeters = Geolocator.distanceBetween(
             pickupLat,
             pickupLng,
@@ -282,7 +319,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             driverLng,
           );
 
-          // 3. Filter drivers within 10km (10000 meters)
           if (distanceInMeters <= 10000) {
             tokens.add(data["fcmToken"]);
           }
@@ -294,7 +330,6 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         return;
       }
 
-      // 4. Send to Node Server
       await http.post(
         Uri.parse(serverUrl),
         headers: {"Content-Type": "application/json"},
@@ -310,7 +345,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     }
   }
 
-  // --- 2. NEW: LISTEN FOR DRIVER ACCEPTANCE ---
+  // --- 2. MODIFIED: LISTEN FOR DRIVER ACCEPTANCE & UPDATES ---
   void _listenForDriverAcceptance(DocumentReference bookingRef) {
     _bookingSubscription = bookingRef.snapshots().listen((snapshot) {
       if (!snapshot.exists) return;
@@ -318,14 +353,31 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       final data = snapshot.data() as Map<String, dynamic>;
       final String status = data['status'] ?? 'pending';
 
-      // Check if a driver has accepted
-      if (status == 'accepted' && data['driver_id'] != null) {
-        _bookingSubscription?.cancel(); // Stop listening once found
+      // --- NEW: Sync Status & OTPs ---
+      if (mounted) {
+        setState(() {
+          _currentRideStatus = status;
+          if (data['security'] != null) {
+            _pickupOtp = data['security']['pickup_otp'];
+            _deliveryOtp = data['security']['delivery_otp'];
+          }
+        });
+      }
 
-        // Extract driver details written by the Driver App
+      // Check if driver assigned (accepted, started, or in_progress)
+      if ((status == 'accepted' ||
+              status == 'started' ||
+              status == 'in_progress') &&
+          data['driver_id'] != null) {
+        // We DO NOT cancel subscription here anymore, we track the ride.
+
         final driverData = data['driver_details'] ?? {};
 
-        // Create the Assigned Driver object from the live data
+        // Calculate dynamic title
+        String dynamicTitle = "On the way";
+        if (status == 'started') dynamicTitle = "Arrived";
+        if (status == 'in_progress') dynamicTitle = "Heading to dropoff";
+
         final matchedDriver = RideOption(
           id: data['driver_id'],
           driverName: driverData['name'] ?? "Ryde Driver",
@@ -333,9 +385,15 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
           price:
               (data['price'] as num?)?.toDouble() ??
               _selectedVehicleType!.price,
-          time: "Arriving",
+          time: status == 'started' ? "Arrived" : "On the way",
           seats: "",
-          carImage: _selectedVehicleType?.carImage ?? 'assets/images/car.png',
+          // Prefer vehicle_option's image if saved, else selected vehicle image
+          carImage:
+              (data['vehicle_option'] != null
+                  ? (data['vehicle_option']['car_image']?.toString())
+                  : null) ??
+              _selectedVehicleType?.carImage ??
+              'assets/images/car.png',
           driverImage:
               driverData['image'] ??
               'https://i.pravatar.cc/150?u=${data['driver_id']}',
@@ -347,19 +405,389 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             (data['driver_location_lng'] as num?)?.toDouble() ??
                 _fromLatLng!.longitude,
           ),
-          vehicleType: data['vehicle_type'] ?? 'car',
-          displayTitle: "On the way",
+          vehicleType:
+              (data['vehicle_option'] != null
+                  ? (data['vehicle_option']['vehicle_type']?.toString())
+                  : null) ??
+              data['vehicle_type'] ??
+              'car',
+          displayTitle:
+              (data['vehicle_option'] != null
+                  ? (data['vehicle_option']['display_title']?.toString())
+                  : null) ??
+              dynamicTitle,
         );
 
         setState(() {
           _assignedDriver = matchedDriver;
-          _isFindingDriver = false; // Remove loading screen
-          // Update route to show driver approaching
+          _isFindingDriver = false;
+
+          // Update map route depending on stage
+          // 1. Accepted/Arrived: Show Driver -> Pickup (show ride details)
+          // 2. In Progress: Driver -> Dropoff (tracking mode)
           _drawRoute(_assignedDriver!.driverLocation);
+          // If the booking saved a vehicle_option, restore it into selected vehicle
+          final vehicleOpt = data['vehicle_option'] as Map<String, dynamic>?;
+          if (vehicleOpt != null) {
+            _selectedVehicleType = RideOption(
+              id: vehicleOpt['id']?.toString() ?? '',
+              driverName: _assignedDriver?.driverName ?? '',
+              rating: (vehicleOpt['rating'] as num?)?.toDouble() ?? 5.0,
+              price:
+                  (vehicleOpt['price'] as num?)?.toDouble() ??
+                  _assignedDriver!.price,
+              time: _assignedDriver?.time ?? '',
+              seats: vehicleOpt['seats']?.toString() ?? '',
+              carImage:
+                  vehicleOpt['car_image']?.toString() ??
+                  _assignedDriver!.carImage,
+              driverImage:
+                  vehicleOpt['driver_image']?.toString() ??
+                  _assignedDriver!.driverImage,
+              carDescription:
+                  vehicleOpt['description']?.toString() ??
+                  _assignedDriver!.carDescription,
+              driverLocation: _assignedDriver!.driverLocation,
+              vehicleType:
+                  vehicleOpt['vehicle_type']?.toString() ??
+                  _assignedDriver!.vehicleType,
+              displayTitle:
+                  vehicleOpt['display_title']?.toString() ??
+                  _assignedDriver!.displayTitle,
+              maxWeight: vehicleOpt['max_weight']?.toString() ?? '',
+              maxDim: vehicleOpt['max_dim']?.toString() ?? '',
+            );
+          }
+          if (status == 'in_progress') {
+            _isTracking = true;
+          } else if (status == 'accepted' || status == 'started') {
+            _isTracking = false; // show ride details (OTP)
+          }
           _refitMapWithDelay();
         });
       }
+
+      // Handle Completion
+      if (status == 'completed') {
+        // Stop live updates and navigate to the ride summary screen.
+        _bookingSubscription?.cancel();
+        // Ensure we navigate after the current frame to avoid setState during build.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          try {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => RideSummaryScreen(
+                  bookingId: bookingRef.id,
+                  bookingData: data,
+                ),
+              ),
+            );
+          } catch (e) {
+            debugPrint('Error navigating to RideSummary: $e');
+          }
+        });
+        return; // no further processing needed for completed state
+      }
     });
+  }
+
+  // Load an existing booking and populate the UI so user can resume
+  Future<void> _loadExistingBooking(String bookingId) async {
+    try {
+      final docRef = FirebaseFirestore.instance
+          .collection('booking')
+          .doc(bookingId);
+      final snap = await docRef.get();
+      if (!snap.exists) return;
+
+      final data = snap.data() as Map<String, dynamic>;
+
+      final route = data['route'] as Map<String, dynamic>? ?? {};
+
+      final double pLat = (route['pickup_lat'] as num?)?.toDouble() ?? 0.0;
+      final double pLng = (route['pickup_lng'] as num?)?.toDouble() ?? 0.0;
+      final double dLat = (route['dropoff_lat'] as num?)?.toDouble() ?? 0.0;
+      final double dLng = (route['dropoff_lng'] as num?)?.toDouble() ?? 0.0;
+
+      setState(() {
+        _fromController.text = route['pickup_address'] ?? '';
+        _toController.text = route['dropoff_address'] ?? '';
+        _fromLatLng = LatLng(pLat, pLng);
+        _toLatLng = LatLng(dLat, dLng);
+        _tripDistanceKm = (route['distance_km'] as num?)?.toDouble() ?? 0.0;
+        _tripDurationMins = (route['duration_mins'] as num?)?.toInt() ?? 0;
+        _currentRideStatus = (data['status'] ?? _currentRideStatus).toString();
+      });
+
+      // Restore saved OTPs/security if present so UI can show PIN immediately
+      if (data['security'] != null) {
+        final sec = data['security'] as Map<String, dynamic>;
+        setState(() {
+          _pickupOtp = sec['pickup_otp']?.toString();
+          _deliveryOtp = sec['delivery_otp']?.toString();
+        });
+      }
+
+      // Adjust UI flags based on status so the screen reflects the booking state
+      final String statusLower = _currentRideStatus.toLowerCase();
+      // Set UI flags to mirror a resumed booking state.
+      // Show the ride details sheet (with OTP) when driver accepted/started.
+      // Only show the dedicated tracking sheet when the parcel is 'in_progress'.
+      if (statusLower == 'pending' || statusLower == 'created') {
+        setState(() {
+          _isFindingDriver = true;
+          _showRideList = false;
+          _showReviewScreen = false;
+          _isTracking = false;
+          _isBookingSuccess = false;
+        });
+      } else if (statusLower == 'accepted' || statusLower == 'started') {
+        setState(() {
+          _isFindingDriver = false;
+          _isTracking =
+              false; // show ride details (OTP) instead of tracking-only
+          _showRideList = false;
+          _showReviewScreen = false;
+        });
+      } else if (statusLower == 'in_progress' || statusLower == 'ongoing') {
+        setState(() {
+          _isFindingDriver = false;
+          _isTracking = true; // full tracking mode (parcel picked up)
+          _showRideList = false;
+          _showReviewScreen = false;
+        });
+      }
+
+      // selected vehicle placeholder (so code referencing it won't break)
+      final vehicleType = (data['vehicle_type'] ?? 'car').toString();
+      final priceVal = (data['price'] as num?)?.toDouble() ?? 0.0;
+
+      // If the booking document saved a detailed vehicle_option, restore from it
+      final vehicleOpt = data['vehicle_option'] as Map<String, dynamic>?;
+      if (vehicleOpt != null) {
+        _selectedVehicleType = RideOption(
+          id: vehicleOpt['id']?.toString() ?? '',
+          driverName: '',
+          rating: 5.0,
+          price: (vehicleOpt['price'] as num?)?.toDouble() ?? priceVal,
+          time: '',
+          seats: vehicleOpt['seats']?.toString() ?? '',
+          carImage:
+              vehicleOpt['car_image']?.toString() ?? 'assets/images/car.png',
+          driverImage: vehicleOpt['driver_image']?.toString() ?? '',
+          carDescription: vehicleOpt['description']?.toString() ?? vehicleType,
+          driverLocation: _fromLatLng ?? LatLng(0, 0),
+          vehicleType: vehicleOpt['vehicle_type']?.toString() ?? vehicleType,
+          displayTitle: vehicleOpt['display_title']?.toString() ?? vehicleType,
+          maxWeight: vehicleOpt['max_weight']?.toString() ?? '',
+          maxDim: vehicleOpt['max_dim']?.toString() ?? '',
+        );
+      } else {
+        _selectedVehicleType = RideOption(
+          id: bookingId,
+          driverName: '',
+          rating: 5.0,
+          price: priceVal,
+          time: '',
+          seats: '',
+          carImage: 'assets/images/car.png',
+          driverImage: '',
+          carDescription: vehicleType,
+          driverLocation: _fromLatLng ?? LatLng(0, 0),
+          vehicleType: vehicleType,
+        );
+      }
+
+      // If driver details exist, create assigned driver object
+      if (data['driver_id'] != null) {
+        final driverData =
+            data['driver_details'] as Map<String, dynamic>? ?? {};
+        final dLatVal =
+            (data['driver_location_lat'] as num?)?.toDouble() ??
+            _fromLatLng?.latitude ??
+            0.0;
+        final dLngVal =
+            (data['driver_location_lng'] as num?)?.toDouble() ??
+            _fromLatLng?.longitude ??
+            0.0;
+
+        setState(() {
+          _assignedDriver = RideOption(
+            id: data['driver_id'],
+            driverName: driverData['name'] ?? 'Driver',
+            rating: (driverData['rating'] as num?)?.toDouble() ?? 5.0,
+            price: priceVal,
+            time: '',
+            seats: '',
+            carImage: driverData['car_image'] ?? 'assets/images/car.png',
+            driverImage:
+                driverData['image'] ??
+                'https://i.pravatar.cc/150?u=${data['driver_id']}',
+            carDescription: driverData['car_model'] ?? '',
+            driverLocation: LatLng(dLatVal, dLngVal),
+            vehicleType: data['vehicle_type'] ?? 'car',
+          );
+        });
+      }
+
+      // If booking is already in_progress when loading, ensure tracking flags are set
+      if (statusLower == 'in_progress' || statusLower == 'ongoing') {
+        setState(() {
+          _isTracking = true;
+          _isFindingDriver = false;
+          _showRideList = false;
+          _showReviewScreen = false;
+        });
+        // If we have an assigned driver, make sure map shows driver->dropoff
+        if (_assignedDriver != null) {
+          _drawRoute(_assignedDriver!.driverLocation);
+          _refitMapWithDelay();
+        } else if (_fromLatLng != null) {
+          _drawRoute(_fromLatLng!);
+        }
+      }
+
+      // Restore pickup/dropoff details into the form controllers
+      final pickupDetails =
+          data['pickup_details'] as Map<String, dynamic>? ?? {};
+      final dropoffDetails =
+          data['dropoff_details'] as Map<String, dynamic>? ?? {};
+
+      setState(() {
+        _senderNameController.text = pickupDetails['name'] ?? '';
+        _senderPhoneController.text = pickupDetails['phone'] ?? '';
+        _senderBuildingController.text = pickupDetails['building'] ?? '';
+        _senderUnitController.text = pickupDetails['unit'] ?? '';
+        _senderInstructionController.text = pickupDetails['instructions'] ?? '';
+        _senderOption = pickupDetails['option'] ?? _senderOption;
+
+        _receiverNameController.text = dropoffDetails['name'] ?? '';
+        _receiverPhoneController.text = dropoffDetails['phone'] ?? '';
+        _receiverBuildingController.text = dropoffDetails['building'] ?? '';
+        _receiverUnitController.text = dropoffDetails['unit'] ?? '';
+        _receiverInstructionController.text =
+            dropoffDetails['instructions'] ?? '';
+        _receiverOption = dropoffDetails['option'] ?? _receiverOption;
+      });
+
+      // Start listening for live updates to this booking
+      // Draw initial route and start listening for live updates
+      if (_assignedDriver != null) {
+        _drawRoute(_assignedDriver!.driverLocation);
+      } else if (_fromLatLng != null && _toLatLng != null) {
+        _drawRoute(_fromLatLng!);
+      }
+
+      _listenForDriverAcceptance(docRef);
+    } catch (e) {
+      debugPrint('Error loading existing booking: $e');
+    }
+  }
+
+  // Populate UI from bookingData without a document listener
+  void _populateFromBookingData(Map<String, dynamic> data) {
+    final route = data['route'] as Map<String, dynamic>? ?? {};
+    final double pLat = (route['pickup_lat'] as num?)?.toDouble() ?? 0.0;
+    final double pLng = (route['pickup_lng'] as num?)?.toDouble() ?? 0.0;
+    final double dLat = (route['dropoff_lat'] as num?)?.toDouble() ?? 0.0;
+    final double dLng = (route['dropoff_lng'] as num?)?.toDouble() ?? 0.0;
+
+    setState(() {
+      _fromController.text = route['pickup_address'] ?? '';
+      _toController.text = route['dropoff_address'] ?? '';
+      _fromLatLng = LatLng(pLat, pLng);
+      _toLatLng = LatLng(dLat, dLng);
+      _tripDistanceKm = (route['distance_km'] as num?)?.toDouble() ?? 0.0;
+      _tripDurationMins = (route['duration_mins'] as num?)?.toInt() ?? 0;
+      _currentRideStatus = (data['status'] ?? _currentRideStatus).toString();
+    });
+
+    // Restore OTP/security if available in provided bookingData
+    if (data['security'] != null) {
+      final sec = data['security'] as Map<String, dynamic>;
+      setState(() {
+        _pickupOtp = sec['pickup_otp']?.toString();
+        _deliveryOtp = sec['delivery_otp']?.toString();
+      });
+    }
+
+    // Populate pickup/dropoff details into the booking form so UI matches original booking
+    final pickupDetails = data['pickup_details'] as Map<String, dynamic>? ?? {};
+    final dropoffDetails =
+        data['dropoff_details'] as Map<String, dynamic>? ?? {};
+    setState(() {
+      _senderNameController.text = pickupDetails['name'] ?? '';
+      _senderPhoneController.text = pickupDetails['phone'] ?? '';
+      _senderBuildingController.text = pickupDetails['building'] ?? '';
+      _senderUnitController.text = pickupDetails['unit'] ?? '';
+      _senderInstructionController.text = pickupDetails['instructions'] ?? '';
+      _senderOption = pickupDetails['option'] ?? _senderOption;
+
+      _receiverNameController.text = dropoffDetails['name'] ?? '';
+      _receiverPhoneController.text = dropoffDetails['phone'] ?? '';
+      _receiverBuildingController.text = dropoffDetails['building'] ?? '';
+      _receiverUnitController.text = dropoffDetails['unit'] ?? '';
+      _receiverInstructionController.text =
+          dropoffDetails['instructions'] ?? '';
+      _receiverOption = dropoffDetails['option'] ?? _receiverOption;
+    });
+
+    // Also attempt to restore vehicle_option into selected vehicle for better UI fidelity
+    final vehicleOpt = data['vehicle_option'] as Map<String, dynamic>?;
+    if (vehicleOpt != null) {
+      setState(() {
+        _selectedVehicleType = RideOption(
+          id: vehicleOpt['id']?.toString() ?? '',
+          driverName: '',
+          rating: 5.0,
+          price: (vehicleOpt['price'] as num?)?.toDouble() ?? 0.0,
+          time: '',
+          seats: vehicleOpt['seats']?.toString() ?? '',
+          carImage:
+              vehicleOpt['car_image']?.toString() ?? 'assets/images/car.png',
+          driverImage: vehicleOpt['driver_image']?.toString() ?? '',
+          carDescription:
+              vehicleOpt['description']?.toString() ??
+              vehicleOpt['vehicle_type']?.toString() ??
+              'Ride',
+          driverLocation: _fromLatLng ?? LatLng(0, 0),
+          vehicleType: vehicleOpt['vehicle_type']?.toString() ?? 'car',
+          displayTitle:
+              vehicleOpt['display_title']?.toString() ??
+              vehicleOpt['vehicle_type']?.toString() ??
+              'Ride',
+          maxWeight: vehicleOpt['max_weight']?.toString() ?? '',
+          maxDim: vehicleOpt['max_dim']?.toString() ?? '',
+        );
+      });
+    }
+
+    // Mirror the UI decisions done in _loadExistingBooking: set flags based on status
+    final String statusLower = _currentRideStatus.toLowerCase();
+    if (statusLower == 'pending' || statusLower == 'created') {
+      setState(() {
+        _isFindingDriver = true;
+        _showRideList = false;
+        _showReviewScreen = false;
+        _isTracking = false;
+        _isBookingSuccess = false;
+      });
+    } else if (statusLower == 'accepted' || statusLower == 'started') {
+      setState(() {
+        _isFindingDriver = false;
+        _isTracking = false; // show ride details (OTP)
+        _showRideList = false;
+        _showReviewScreen = false;
+      });
+    } else if (statusLower == 'in_progress' || statusLower == 'ongoing') {
+      setState(() {
+        _isFindingDriver = false;
+        _isTracking = true;
+        _showRideList = false;
+        _showReviewScreen = false;
+      });
+    }
   }
 
   // --- INDIAN FARE CALCULATION ---
@@ -599,18 +1027,33 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     }
   }
 
-  // --- ROUTE & TRIP LOGIC ---
+  // --- MODIFIED: ROUTE & TRIP LOGIC (To handle tracking switches) ---
   Future<void> _drawRoute(LatLng targetLoc) async {
     if (_fromLatLng == null) return;
-    // If we have an assigned driver, draw from Driver to Pickup
-    // If not, draw from Pickup to Dropoff (for route preview)
 
-    LatLng origin = _assignedDriver != null ? targetLoc : _fromLatLng!;
-    LatLng dest = _assignedDriver != null ? _fromLatLng! : targetLoc;
+    // Logic:
+    // 1. If Preview (no driver): Pickup -> Dropoff
+    // 2. If Driver & Status is Accepted/Arrived: Driver -> Pickup
+    // 3. If Driver & Status is In Progress: Driver -> Dropoff
 
-    // NOTE: For better UX, if driver is assigned, origin=Driver, dest=Pickup
-    // If just booking, origin=Pickup, dest=Dropoff.
-    // The previous logic passed 'driverLoc', which implies we are showing driver path.
+    LatLng origin;
+    LatLng dest;
+
+    if (_assignedDriver == null) {
+      // Preview Mode
+      origin = _fromLatLng!;
+      dest = _toLatLng!;
+    } else {
+      // Tracking Mode
+      origin = targetLoc; // Driver's current location
+      if (_currentRideStatus == 'in_progress') {
+        // Parcel picked up, show path to Destination
+        dest = _toLatLng!;
+      } else {
+        // Driver coming to Pickup
+        dest = _fromLatLng!;
+      }
+    }
 
     final String url =
         "https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${dest.latitude},${dest.longitude}&mode=driving&key=$_googleApiKey";
@@ -793,6 +1236,11 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       _tripDistanceKm = 0.0;
       _tripDurationMins = 0;
 
+      // Reset OTPs
+      _pickupOtp = null;
+      _deliveryOtp = null;
+      _currentRideStatus = 'pending';
+
       // Clear details forms
       _senderBuildingController.clear();
       _senderUnitController.clear();
@@ -808,6 +1256,73 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
     return ['bike', 'auto', 'car', 'tempo'];
   }
 
+  Future<bool> _onWillPop() async {
+    // Mirror the top-left back button behavior for hardware back presses.
+    if (_isEditingPickup) {
+      setState(() => _isEditingPickup = false);
+      return false;
+    }
+    if (_isEditingDropoff) {
+      setState(() => _isEditingDropoff = false);
+      return false;
+    }
+    if (_isFindingDriver) {
+      setState(() => _isFindingDriver = false);
+      _bookingSubscription?.cancel();
+      return false;
+    }
+    if (_showReviewScreen) {
+      setState(() {
+        _showReviewScreen = false;
+        _polylines.clear();
+      });
+      return false;
+    }
+    if (_isTracking || _isBookingSuccess) {
+      _resetApp();
+      return false;
+    }
+    if (_assignedDriver != null) {
+      if (_currentRideStatus == 'accepted' ||
+          _currentRideStatus == 'in_progress' ||
+          _currentRideStatus == 'started') {
+        // Prevent Home's auto-resume from immediately navigating back here.
+        HomePage.suppressAutoResume(const Duration(seconds: 3));
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomePage()),
+          (route) => false,
+        );
+        return false;
+      } else {
+        setState(() {
+          _assignedDriver = null;
+          _isBookingSuccess = false;
+          _showRideList = true;
+          _bookingSubscription?.cancel();
+        });
+        return false;
+      }
+    }
+    if (_showRideList) {
+      setState(() {
+        _showRideList = false;
+        _showReviewScreen = true;
+        _selectedVehicleType = null;
+      });
+      return false;
+    }
+    if (_isSearching) {
+      setState(() {
+        _isSearching = false;
+        FocusScope.of(context).unfocus();
+      });
+      return false;
+    }
+
+    // Default: allow pop
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final double screenHeight = MediaQuery.of(context).size.height;
@@ -819,178 +1334,202 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
         _fromController.text.isNotEmpty &&
         _toController.text.isNotEmpty;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: Stack(
-        children: [
-          // 1. GOOGLE MAP
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: screenHeight,
-            child: GoogleMap(
-              mapType: MapType.normal,
-              initialCameraPosition: _kInitialPosition,
-              myLocationEnabled: true,
-              myLocationButtonEnabled: false,
-              zoomControlsEnabled: false,
-              compassEnabled: false,
-              padding: EdgeInsets.only(bottom: bottomPadding),
-              markers: _markers,
-              polylines: _polylines,
-              onMapCreated: (controller) => _mapController.complete(controller),
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: Stack(
+          children: [
+            // 1. GOOGLE MAP
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: screenHeight,
+              child: GoogleMap(
+                mapType: MapType.normal,
+                initialCameraPosition: _kInitialPosition,
+                myLocationEnabled: true,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                compassEnabled: false,
+                padding: EdgeInsets.only(bottom: bottomPadding),
+                markers: _markers,
+                polylines: _polylines,
+                onMapCreated: (controller) =>
+                    _mapController.complete(controller),
+              ),
             ),
-          ),
 
-          // 2. TOP NAVIGATION
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16.0,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
+            // 2. TOP NAVIGATION
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 8,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.black,
                           ),
-                        ],
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.black),
-                        onPressed: () {
-                          if (_isEditingPickup)
-                            setState(() => _isEditingPickup = false);
-                          else if (_isEditingDropoff)
-                            setState(() => _isEditingDropoff = false);
-                          else if (_isFindingDriver) {
-                            // User cancelled while searching
-                            setState(() => _isFindingDriver = false);
-                            _bookingSubscription?.cancel();
-                            // Optional: Update firestore to 'cancelled' here
-                          } else if (_showReviewScreen)
-                            setState(() {
-                              _showReviewScreen = false;
-                              _polylines.clear();
-                            });
-                          else if (_isTracking)
-                            _resetApp();
-                          else if (_isBookingSuccess)
-                            _resetApp();
-                          else if (_assignedDriver != null)
-                            setState(() {
-                              _assignedDriver = null;
-                              _isBookingSuccess = false;
-                              _showRideList = true;
+                          onPressed: () {
+                            if (_isEditingPickup)
+                              setState(() => _isEditingPickup = false);
+                            else if (_isEditingDropoff)
+                              setState(() => _isEditingDropoff = false);
+                            else if (_isFindingDriver) {
+                              setState(() => _isFindingDriver = false);
                               _bookingSubscription?.cancel();
-                            });
-                          else if (_showRideList)
-                            setState(() {
-                              _showRideList = false;
-                              _showReviewScreen = true;
-                              _selectedVehicleType = null;
-                            });
-                          else if (_isSearching)
-                            setState(() {
-                              _isSearching = false;
-                              FocusScope.of(context).unfocus();
-                            });
-                          else
-                            Navigator.pop(context);
-                        },
+                            } else if (_showReviewScreen)
+                              setState(() {
+                                _showReviewScreen = false;
+                                _polylines.clear();
+                              });
+                            else if (_isTracking)
+                              _resetApp();
+                            else if (_isBookingSuccess)
+                              _resetApp();
+                            else if (_assignedDriver != null) {
+                              // If a driver has been assigned and ride is accepted/in progress,
+                              // back should return to Home (clear booking screen), similar to Uber.
+                              if (_currentRideStatus == 'accepted' ||
+                                  _currentRideStatus == 'in_progress' ||
+                                  _currentRideStatus == 'started') {
+                                // Prevent Home's auto-resume from immediately navigating back here.
+                                HomePage.suppressAutoResume(
+                                  const Duration(seconds: 3),
+                                );
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                    builder: (_) => const HomePage(),
+                                  ),
+                                  (route) => false,
+                                );
+                              } else {
+                                setState(() {
+                                  _assignedDriver = null;
+                                  _isBookingSuccess = false;
+                                  _showRideList = true;
+                                  _bookingSubscription?.cancel();
+                                });
+                              }
+                            } else if (_showRideList)
+                              setState(() {
+                                _showRideList = false;
+                                _showReviewScreen = true;
+                                _selectedVehicleType = null;
+                              });
+                            else if (_isSearching)
+                              setState(() {
+                                _isSearching = false;
+                                FocusScope.of(context).unfocus();
+                              });
+                            else
+                              Navigator.pop(context);
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 20),
-                    Text(
-                      _isEditingPickup
-                          ? "Pick-up details"
-                          : _isEditingDropoff
-                          ? "Drop-off details"
-                          : _showReviewScreen
-                          ? "Review delivery"
-                          : _isFindingDriver
-                          ? "Connecting..."
-                          : _isTracking
-                          ? ""
-                          : (_isBookingSuccess
-                                ? ""
-                                : (_assignedDriver != null
-                                      ? "Driver Found"
-                                      : (_showRideList
-                                            ? "Choose Vehicle"
-                                            : "Ride"))),
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                      const SizedBox(width: 20),
+                      Text(
+                        _isEditingPickup
+                            ? "Pick-up details"
+                            : _isEditingDropoff
+                            ? "Drop-off details"
+                            : _showReviewScreen
+                            ? "Review delivery"
+                            : _isFindingDriver
+                            ? "Connecting..."
+                            : _isTracking
+                            ? ""
+                            : (_isBookingSuccess
+                                  ? ""
+                                  : (_assignedDriver != null
+                                        ? (_currentRideStatus == 'in_progress'
+                                              ? "On the way"
+                                              : "Driver Found")
+                                        : (_showRideList
+                                              ? "Choose Vehicle"
+                                              : "Ride"))),
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // 3. BOTTOM SHEET
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                height: _getSheetHeight(screenHeight),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 20,
+                      spreadRadius: 5,
+                      offset: Offset(0, -5),
                     ),
                   ],
                 ),
+                child: _isEditingPickup
+                    ? _buildContactDetailsSheet(isPickup: true)
+                    : _isEditingDropoff
+                    ? _buildContactDetailsSheet(isPickup: false)
+                    : _showReviewScreen
+                    ? _buildReviewOrderSheet()
+                    : _isFindingDriver
+                    ? _buildFindingDriverSheet()
+                    : _isTracking
+                    ? _buildTrackingSheet()
+                    : _isBookingSuccess
+                    ? _buildSuccessSheet()
+                    : _assignedDriver != null
+                    ? _buildRideDetailsSheet()
+                    : _showRideList
+                    ? _buildRideSelectionList()
+                    : _buildSearchForm(isFindNowEnabled),
               ),
             ),
-          ),
 
-          // 3. BOTTOM SHEET
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              height: _getSheetHeight(screenHeight),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 20,
-                    spreadRadius: 5,
-                    offset: Offset(0, -5),
-                  ),
-                ],
+            if (_isLoading)
+              Container(
+                color: Colors.black.withOpacity(0.3),
+                child: const Center(child: CircularProgressIndicator()),
               ),
-              child: _isEditingPickup
-                  ? _buildContactDetailsSheet(isPickup: true)
-                  : _isEditingDropoff
-                  ? _buildContactDetailsSheet(isPickup: false)
-                  : _showReviewScreen
-                  ? _buildReviewOrderSheet()
-                  : _isFindingDriver
-                  ? _buildFindingDriverSheet()
-                  : _isTracking
-                  ? _buildTrackingSheet()
-                  : _isBookingSuccess
-                  ? _buildSuccessSheet()
-                  : _assignedDriver != null
-                  ? _buildRideDetailsSheet()
-                  : _showRideList
-                  ? _buildRideSelectionList()
-                  : _buildSearchForm(isFindNowEnabled),
-            ),
-          ),
-
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(child: CircularProgressIndicator()),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1102,7 +1641,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                 }
 
                 if (nearestDriverDoc != null) {
-                  final data = nearestDriverDoc!.data() as Map<String, dynamic>;
+                  final data = nearestDriverDoc.data() as Map<String, dynamic>;
                   final vehicle =
                       data['vehicle'] as Map<String, dynamic>? ?? {};
                   final locMap = data['location'] as Map<String, dynamic>;
@@ -1144,7 +1683,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
                   vehicleOptions.add(
                     RideOption(
-                      id: nearestDriverDoc!.id,
+                      id: nearestDriverDoc.id,
                       driverName: data['driverName'] ?? "Driver",
                       rating: (data['rating'] as num?)?.toDouble() ?? 5.0,
                       price: price,
@@ -1295,13 +1834,13 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             width: double.infinity,
             height: 55,
             child: ElevatedButton(
-              // --- 3. MODIFIED: Book Button Logic ---
               onPressed: _selectedVehicleType == null
                   ? null
                   : () async {
                       setState(() {
                         _isFindingDriver = true;
                         _assignedDriver = null;
+                        _currentRideStatus = 'pending';
                       });
 
                       // Create the Pending Request
@@ -1309,12 +1848,20 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
                       if (bookingRef != null) {
                         // --- SEND NOTIFICATION TO NEARBY DRIVERS ---
-                        _sendRadiusNotification(
+                        await _sendRadiusNotification(
                           _selectedVehicleType!.vehicleType,
                         );
 
-                        // Wait for a driver to accept
-                        _listenForDriverAcceptance(bookingRef);
+                        // Navigate to a fresh booking screen that resumes from the saved booking.
+                        // Use pushReplacement so the previous form screen is removed from the stack
+                        // and pressing Back will exit to the previous app screen (like Home).
+                        if (!mounted) return;
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                RideBookingScreen(bookingId: bookingRef.id),
+                          ),
+                        );
                       } else {
                         // Error handling
                         setState(() => _isFindingDriver = false);
@@ -1970,22 +2517,97 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RichText(
-            text: TextSpan(
-              text: "Arriving in ",
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-              children: [
-                TextSpan(
-                  text: "$_driverArrivalMins Mins",
-                  style: const TextStyle(color: Color(0xFF4CAF50)),
+          // --- OTP badge for tracking as well (show pickup/delivery depending on status)
+          Builder(
+            builder: (context) {
+              String? otpToShow;
+              Color otpColor = Colors.black;
+              if (_currentRideStatus == 'accepted' ||
+                  _currentRideStatus == 'started') {
+                otpToShow = _pickupOtp;
+                otpColor = const Color(0xFF1f1f1f);
+              } else if (_currentRideStatus == 'in_progress') {
+                otpToShow = _deliveryOtp;
+                otpColor = const Color(0xFF276EF1);
+              }
+              if (otpToShow == null) return const SizedBox.shrink();
+              return Align(
+                alignment: Alignment.centerRight,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: otpColor,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: otpColor.withOpacity(0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "PIN",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      Text(
+                        otpToShow,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 3.0,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              );
+            },
           ),
+
+          // Show 'Heading to Destination' when parcel is picked up (in_progress),
+          // otherwise show ETA information.
+          if (_currentRideStatus == 'in_progress')
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8.0),
+              child: Text(
+                'Heading to Destination',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            )
+          else
+            RichText(
+              text: TextSpan(
+                text: "Arriving in ",
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+                children: [
+                  TextSpan(
+                    text: "$_driverArrivalMins Mins",
+                    style: const TextStyle(color: Color(0xFF4CAF50)),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(16),
@@ -2009,6 +2631,13 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                         fontSize: 14,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    // Show vehicle description & number (if available)
+                    Text(
+                      '${ride.carDescription}${ride.vehicleNumber.isNotEmpty ? ' • ${ride.vehicleNumber.toUpperCase()}' : ''}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                      textAlign: TextAlign.center,
+                    ),
                   ],
                 ),
                 const Spacer(),
@@ -2016,6 +2645,30 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                   width: 120,
                   height: 70,
                   child: Image.asset(ride.carImage, fit: BoxFit.contain),
+                ),
+              ],
+            ),
+          ),
+          // --- EXTRA: show price / ETA and info similar to ride details so resumed tracking
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7F7F9),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                _buildInfoRow(
+                  "Ride Price",
+                  "₹${ride.price.toInt()}",
+                  isPrice: true,
+                ),
+                const SizedBox(height: 10),
+                _buildInfoRow(
+                  "ETA",
+                  ride.time.isNotEmpty ? ride.time : '$_driverArrivalMins min',
+                  isPrice: false,
                 ),
               ],
             ),
@@ -2138,7 +2791,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
           ),
           const SizedBox(height: 30),
           const Text(
-            "Booking placed\nsuccessfully",
+            "Delivery placed\nsuccessfully",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
           ),
@@ -2147,11 +2800,12 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             width: double.infinity,
             height: 55,
             child: ElevatedButton(
-              onPressed: () => setState(() {
+              /*  onPressed: () => setState(() {
                 _isBookingSuccess = false;
                 _isTracking = true;
                 _refitMapWithDelay();
-              }),
+              }),*/
+              onPressed: () {},
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF3B82F6),
                 foregroundColor: Colors.white,
@@ -2172,73 +2826,212 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
 
   Widget _buildRideDetailsSheet() {
     final ride = _assignedDriver!;
+
+    // --- NEW: Determine OTP Display Logic ---
+    String? otpToShow;
+    Color otpColor = Colors.black;
+
+    // Logic: If driver accepted/started, show Pickup OTP.
+    // If In Progress (parcel picked up), show Delivery OTP.
+    if (_currentRideStatus == 'accepted' || _currentRideStatus == 'started') {
+      otpToShow = _pickupOtp;
+      // pickup OTP styling
+      otpColor = const Color(0xFF1f1f1f); // Dark background for pickup
+    } else if (_currentRideStatus == 'in_progress') {
+      otpToShow = _deliveryOtp;
+      // delivery OTP styling
+      otpColor = const Color(0xFF276EF1); // Uber Blue for delivery
+    }
+
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  "Driver Found!",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _currentRideStatus == 'started'
+                            ? "Driver Arrived!"
+                            : (_currentRideStatus == 'in_progress'
+                                  ? "On the way"
+                                  : "Driver Found!"),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currentRideStatus == 'in_progress'
+                            ? "Heading to Destination"
+                            : "Arriving in $_driverArrivalMins min",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                // --- NEW: UBER STYLE OTP BADGE ---
+                if (otpToShow != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: otpColor,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: otpColor.withOpacity(0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          "PIN",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        Text(
+                          otpToShow,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 3.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 20),
-            CircleAvatar(
-              radius: 45,
-              backgroundImage: NetworkImage(ride.driverImage),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              ride.driverName,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.star, color: Colors.orange[700], size: 18),
-                Text(
-                  " ${ride.rating.toStringAsFixed(1)}",
-                  style: const TextStyle(fontSize: 16),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Text(
-              ride.carDescription,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
-            ),
-            // LICENSE PLATE BADGE
-            const SizedBox(height: 5),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.yellow[100],
-                border: Border.all(color: Colors.black12),
-                borderRadius: BorderRadius.circular(4),
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey[200]!),
               ),
-              child: Text(
-                ride.vehicleNumber.toUpperCase(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                  fontSize: 13,
-                ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundImage: NetworkImage(ride.driverImage),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ride.driverName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Text(
+                              ride.carDescription,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                ride.vehicleNumber.toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    children: [
+                      Icon(Icons.star, color: Colors.orange[700], size: 20),
+                      Text(
+                        ride.rating.toStringAsFixed(1),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
+
+            // --- INFO BOX ---
+            if (_currentRideStatus == 'accepted' ||
+                _currentRideStatus == 'started')
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade100),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.blue),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "Verify this PIN with your driver for security.",
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue.shade900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFEBF5FF),
+                color: const Color(0xFFF7F7F9),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
@@ -2258,10 +3051,10 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               width: double.infinity,
               height: 55,
               child: ElevatedButton(
+                // In a real app, status updates happen via Firestore listener.
+                // Keeping this button for user to manually proceed if needed for testing.
                 onPressed: () {
-                  setState(() {
-                    _isBookingSuccess = true;
-                  });
+                  // You can add manual override logic here if desired
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF3B82F6),
@@ -2270,36 +3063,45 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                     borderRadius: BorderRadius.circular(30),
                   ),
                 ),
-                child: const Text(
-                  "Let's Go",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                child: Text(
+                  _currentRideStatus == 'in_progress'
+                      ? "Track Delivery"
+                      : "Track Driver",
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 10),
-            TextButton(
-              onPressed: () {
-                _resetApp();
-              },
-              child: SizedBox(
-                width: double.infinity,
-                height: 55,
-                child: TextButton(
-                  onPressed: _resetApp,
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.red[50],
-                    foregroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+            // Show cancel only when ride hasn't been accepted yet.
+            if (_currentRideStatus == 'pending' ||
+                _currentRideStatus == 'created')
+              TextButton(
+                onPressed: _resetApp,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: TextButton(
+                    onPressed: _resetApp,
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.red[50],
+                      foregroundColor: Colors.red,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
-                  ),
-                  child: const Text(
-                    "Cancel Ride",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    child: const Text(
+                      "Cancel Ride",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

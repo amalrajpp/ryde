@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:ryde/features/screen/chat.dart';
+import 'package:ryde/features/chat/views/chat.dart';
 
 class RideTrackingScreen extends StatefulWidget {
   final String bookingId;
@@ -172,7 +172,9 @@ class _RideTrackingScreenState extends State<RideTrackingScreen> {
 
   // --- MAP LOGIC ---
   void _updateMapState(LatLng driverPos) {
-    bool isPhase2 = _currentStatus == 'ongoing';
+    // Treat both 'ongoing' and 'in_progress' as phase-2 (heading to destination)
+    bool isPhase2 =
+        _currentStatus == 'ongoing' || _currentStatus == 'in_progress';
     LatLng targetLatLng = isPhase2 ? _dropoffLatLng : _pickupLatLng;
 
     setState(() {

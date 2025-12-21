@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ryde/features/screen/ride_booking.dart';
+import 'package:ryde/features/ride/views/ride_booking.dart';
 
 class SearchBarWidget extends StatelessWidget {
   final TextEditingController controller;

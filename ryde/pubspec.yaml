@@ -50,6 +50,7 @@ dependencies:
   geolocator: ^14.0.2
   google_maps_flutter: ^2.14.0
   image_picker: ^1.2.1
+  get: ^4.7.3
 
 
 dev_dependencies:

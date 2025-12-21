@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:get/get.dart';
+import 'package:ryde/features/auth/controllers/auth_controller.dart';
 import 'package:ryde/features/home/view/home_page.dart';
-import 'package:ryde/features/screen/signup.dart';
+import 'package:ryde/features/auth/views/signup.dart';
 
 class GetStartedPage extends StatefulWidget {
   const GetStartedPage({super.key});
@@ -13,7 +15,10 @@ class GetStartedPage extends StatefulWidget {
 }
 
 class _GetStartedPageState extends State<GetStartedPage> {
+  final AuthController _authController = Get.put(AuthController());
+
   Future<void> loginWithGoogle() async {
+    _authController.setGoogleSignInLoading(true);
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn(scopes: ['email']);
 
@@ -37,10 +42,24 @@ class _GetStartedPageState extends State<GetStartedPage> {
       final user = userCredential.user;
       if (user == null) return;
 
-      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
-        "email": user.email,
-        "createdAt": FieldValue.serverTimestamp(),
-        "updatedAt": FieldValue.serverTimestamp(),
+      // Extract name parts from the Google account display name
+      String gFirst = '';
+      String gLast = '';
+      if (user.displayName != null && user.displayName!.isNotEmpty) {
+        final parts = user.displayName!.trim().split(' ');
+        gFirst = parts.first;
+        if (parts.length > 1) gLast = parts.sublist(1).join(' ');
+      }
+
+      // Persist profile info to Firestore using the same field names as profile.dart
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'firstName': gFirst,
+        'lastName': gLast,
+        'photoUrl': user.photoURL ?? googleUser.photoUrl ?? '',
+        'phone': user.phoneNumber ?? '',
+        'email': user.email ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true)); // merge avoids overwrite
 
       ScaffoldMessenger.of(
@@ -56,6 +75,8 @@ class _GetStartedPageState extends State<GetStartedPage> {
       ).showSnackBar(SnackBar(content: Text("Google login failed: $e")));
       // ignore: avoid_print
       print(e);
+    } finally {
+      _authController.setGoogleSignInLoading(false);
     }
   }
 
@@ -169,28 +190,43 @@ class _GetStartedPageState extends State<GetStartedPage> {
           // ---------------------- GOOGLE LOGIN BUTTON ----------------------
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 30),
-            child: GestureDetector(
-              onTap: loginWithGoogle,
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.network(
-                      "https://developers.google.com/identity/images/g-logo.png",
-                      height: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      "Log In with Google",
-                      style: TextStyle(fontSize: 15),
-                    ),
-                  ],
+            child: Obx(
+              () => GestureDetector(
+                onTap: _authController.isGoogleSignInLoading.value
+                    ? null
+                    : loginWithGoogle,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.grey.shade300),
+                    color: _authController.isGoogleSignInLoading.value
+                        ? Colors.grey.shade100
+                        : Colors.white,
+                  ),
+                  child: _authController.isGoogleSignInLoading.value
+                      ? const Center(
+                          child: SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.network(
+                              "https://developers.google.com/identity/images/g-logo.png",
+                              height: 22,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              "Log In with Google",
+                              style: TextStyle(fontSize: 15),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ),

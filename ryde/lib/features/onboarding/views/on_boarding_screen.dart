@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ryde/features/screen/get_started.dart';
+import 'package:ryde/features/auth/views/get_started.dart';
 
 class OnboardingPages extends StatefulWidget {
   const OnboardingPages({super.key});
@@ -22,8 +22,7 @@ class _OnboardingPagesState extends State<OnboardingPages> {
             Align(
               alignment: Alignment.topRight,
               child: TextButton(
-                onPressed: () {
-                },
+                onPressed: () {},
                 child: const Text(
                   "Skip",
                   style: TextStyle(color: Colors.black87),

@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:get/get.dart';
+import 'package:ryde/features/auth/controllers/auth_controller.dart';
 import 'package:ryde/features/home/view/home_page.dart';
-import 'package:ryde/features/screen/signup.dart';
+import 'package:ryde/features/auth/views/signup.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,6 +16,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool showPassword = false;
+  final AuthController _authController = Get.put(AuthController());
 
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
@@ -25,6 +28,29 @@ class _LoginPageState extends State<LoginPage> {
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
+      // After successful sign-in, ensure Firestore user doc contains
+      // firstName, lastName, photoUrl, phone and email (merge to avoid overwrite)
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        String authFirst = '';
+        String authLast = '';
+        if (user.displayName != null && user.displayName!.isNotEmpty) {
+          final parts = user.displayName!.trim().split(' ');
+          authFirst = parts.first;
+          if (parts.length > 1) authLast = parts.sublist(1).join(' ');
+        }
+
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'firstName': authFirst,
+          'lastName': authLast,
+          'photoUrl': user.photoURL ?? '',
+          'phone': user.phoneNumber ?? '',
+          'email': user.email ?? emailController.text.trim(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Login successful")));
@@ -37,6 +63,7 @@ class _LoginPageState extends State<LoginPage> {
 
   // ---------------- GOOGLE LOGIN (v6.2.1) ----------------
   Future<void> loginWithGoogle() async {
+    _authController.setGoogleSignInLoading(true);
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn(scopes: ['email']);
 
@@ -58,11 +85,26 @@ class _LoginPageState extends State<LoginPage> {
       );
       final user = userCredential.user;
       if (user == null) return;
+      // Extract name parts from the Google account display name
+      String gFirst = '';
+      String gLast = '';
+      if (user.displayName != null && user.displayName!.isNotEmpty) {
+        final parts = user.displayName!.trim().split(' ');
+        gFirst = parts.first;
+        if (parts.length > 1) gLast = parts.sublist(1).join(' ');
+      }
 
-      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
-        "email": user.email,
-        "createdAt": FieldValue.serverTimestamp(),
-        "updatedAt": FieldValue.serverTimestamp(),
+      // GoogleSignInAccount may have a photo url accessible via googleUser
+      // but Firebase User also exposes photoURL. Prefer Firebase's.
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'firstName': gFirst,
+        'lastName': gLast,
+        'photoUrl': user.photoURL ?? googleUser.photoUrl ?? '',
+        // Phone number is not always available from Google sign-in; use Firebase user phoneNumber if present.
+        'phone': user.phoneNumber ?? '',
+        'email': user.email ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true)); // merge avoids overwrite
       Navigator.pushReplacement(
         context,
@@ -77,6 +119,8 @@ class _LoginPageState extends State<LoginPage> {
       ).showSnackBar(SnackBar(content: Text("Google login failed: $e")));
       // ignore: avoid_print
       print(e);
+    } finally {
+      _authController.setGoogleSignInLoading(false);
     }
   }
 
@@ -253,29 +297,45 @@ class _LoginPageState extends State<LoginPage> {
             // ---------------- GOOGLE LOGIN BUTTON ----------------
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
-              child: GestureDetector(
-                onTap: loginWithGoogle,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(color: Colors.grey.shade300),
-                    color: Colors.white,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Image.network(
-                        "https://developers.google.com/identity/images/g-logo.png",
-                        height: 22,
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        "Log In with Google",
-                        style: TextStyle(fontSize: 15),
-                      ),
-                    ],
+              child: Obx(
+                () => GestureDetector(
+                  onTap: _authController.isGoogleSignInLoading.value
+                      ? null
+                      : loginWithGoogle,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.grey.shade300),
+                      color: _authController.isGoogleSignInLoading.value
+                          ? Colors.grey.shade100
+                          : Colors.white,
+                    ),
+                    child: _authController.isGoogleSignInLoading.value
+                        ? const Center(
+                            child: SizedBox(
+                              height: 22,
+                              width: 22,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                              ),
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Image.network(
+                                "https://developers.google.com/identity/images/g-logo.png",
+                                height: 22,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                "Log In with Google",
+                                style: TextStyle(fontSize: 15),
+                              ),
+                            ],
+                          ),
                   ),
                 ),
               ),
