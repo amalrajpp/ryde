@@ -2289,10 +2289,15 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
                         child: TextField(
                           controller: phoneCtrl,
                           keyboardType: TextInputType.phone,
+                          maxLength: 10,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           decoration: const InputDecoration(
                             border: InputBorder.none,
                             prefixText: "+91 ",
                             hintText: "00000 00000",
+                            counterText: '',
                           ),
                         ),
                       ),
