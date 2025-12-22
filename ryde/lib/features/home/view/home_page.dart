@@ -53,10 +53,16 @@ class _HomePageState extends State<HomePage> {
     // from the booking screen), skip auto-resume for a short window.
     if (HomePage._suppressAutoResumeUntil != null &&
         DateTime.now().isBefore(HomePage._suppressAutoResumeUntil!)) {
+      debugPrint(
+        'Auto-resume suppressed until ${HomePage._suppressAutoResumeUntil}',
+      );
       return;
     }
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      debugPrint('No user logged in, skipping booking resume check');
+      return;
+    }
 
     try {
       final qs = await FirebaseFirestore.instance
@@ -66,21 +72,57 @@ class _HomePageState extends State<HomePage> {
           .limit(1)
           .get();
 
-      if (qs.docs.isEmpty) return;
+      if (qs.docs.isEmpty) {
+        debugPrint('No bookings found for user');
+        return;
+      }
+
       final doc = qs.docs.first;
       final data = doc.data();
       final status = (data['status'] ?? '').toString().toLowerCase();
 
-      // Define active statuses that should trigger resume
-      const active = [
-        'pending',
-        'created',
+      debugPrint('Found booking ${doc.id} with status: $status');
+
+      // Check if booking was created recently (within last 24 hours)
+      final createdAt = data['created_at'] as Timestamp?;
+      if (createdAt != null) {
+        final createdTime = createdAt.toDate();
+        final now = DateTime.now();
+        final hoursSinceCreation = now.difference(createdTime).inHours;
+
+        // If booking is older than 24 hours, don't auto-resume
+        if (hoursSinceCreation > 24) {
+          debugPrint(
+            'Booking is too old (${hoursSinceCreation}h), not resuming',
+          );
+          return;
+        }
+      }
+
+      // IMPROVED LOGIC: Only auto-resume if driver is assigned or ride is active
+      // Don't auto-resume 'pending' or 'created' bookings that have no driver
+      const activeWithDriver = [
         'accepted',
         'started',
         'in_progress',
         'ongoing',
       ];
-      if (active.contains(status)) {
+
+      // For pending/created status, only resume if driver was assigned
+      if (status == 'pending' || status == 'created') {
+        final driverId = data['driver_id'];
+        if (driverId == null) {
+          debugPrint(
+            'Booking is $status but no driver assigned, not auto-resuming',
+          );
+          return;
+        }
+      }
+
+      if (activeWithDriver.contains(status) ||
+          (status == 'pending' && data['driver_id'] != null) ||
+          (status == 'created' && data['driver_id'] != null)) {
+        debugPrint('Resuming active booking ${doc.id}');
         // Navigate to booking screen to resume
         Navigator.push(
           context,
@@ -89,6 +131,8 @@ class _HomePageState extends State<HomePage> {
                 RideBookingScreen(bookingId: doc.id, bookingData: data),
           ),
         );
+      } else {
+        debugPrint('Booking status $status does not qualify for auto-resume');
       }
     } catch (e) {
       debugPrint('Error checking active booking: $e');
@@ -106,11 +150,11 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('User granted permission');
+      debugPrint('User granted permission');
 
       // B. Get the current FCM token
       String? token = await messaging.getToken();
-      print("FCM Token: $token");
+      debugPrint("FCM Token: $token");
 
       // C. Save the token to Firestore
       await _saveTokenToFirestore(token);
@@ -120,7 +164,7 @@ class _HomePageState extends State<HomePage> {
         _saveTokenToFirestore(newToken);
       });
     } else {
-      print('User declined or has not accepted permission');
+      debugPrint('User declined or has not accepted permission');
     }
   }
 
@@ -137,12 +181,12 @@ class _HomePageState extends State<HomePage> {
           'lastTokenUpdate':
               FieldValue.serverTimestamp(), // Optional: track when it was updated
         });
-        print("FCM Token updated in Firestore for user: ${user.uid}");
+        debugPrint("FCM Token updated in Firestore for user: ${user.uid}");
       } catch (e) {
-        print("Error updating FCM token: $e");
+        debugPrint("Error updating FCM token: $e");
       }
     } else {
-      print("No user logged in, cannot save FCM token.");
+      debugPrint("No user logged in, cannot save FCM token.");
     }
   }
 

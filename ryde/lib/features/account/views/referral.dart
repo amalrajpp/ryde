@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:ryde/shared/utils/custom_button.dart';
 import 'package:ryde/shared/utils/custom_text.dart';
+import 'package:share_plus/share_plus.dart';
 
 class AccountModuleReferralPage extends StatelessWidget {
   static const String routeName = '/account_module/referral';
@@ -186,41 +187,48 @@ class AccountModuleReferralPage extends StatelessWidget {
                 textColor: Colors.white,
                 height: 52,
                 borderRadius: 8,
-                onTap: () {
-                  // Copy to clipboard
-                  Clipboard.setData(
-                    ClipboardData(
-                      text:
-                          '🚗 Join RYDE and get rewarded! Use my referral code: $code when signing up. Download now and start earning!',
-                    ),
-                  );
+                onTap: () async {
+                  // Share the referral code and message
+                  final shareText =
+                      '🚗 Join RYDE and get rewarded! Use my referral code: $code when signing up. Download now and start earning!';
 
-                  // Show success message
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Row(
-                        children: [
-                          Icon(
-                            Icons.check_circle_outline,
-                            color: Colors.white,
-                            size: 18,
+                  try {
+                    await Share.share(
+                      shareText,
+                      subject: 'Join RYDE with my referral code',
+                    );
+                  } catch (e) {
+                    // If sharing fails, copy to clipboard as fallback
+                    await Clipboard.setData(ClipboardData(text: shareText));
+
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle_outline,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Referral message copied! Share it with your friends.',
+                                ),
+                              ),
+                            ],
                           ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Referral message copied! Share it with your friends.',
-                            ),
+                          backgroundColor: Colors.black,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ],
-                      ),
-                      backgroundColor: Colors.black,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  }
                 },
               ),
             ),
