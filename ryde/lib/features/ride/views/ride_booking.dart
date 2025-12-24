@@ -11,9 +11,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ryde/shared/services/place_service.dart'; // Ensure this path matches your project
 import 'package:ryde/features/home/view/home_page.dart';
 import 'package:ryde/features/ride/views/ride_summary.dart';
+import 'package:ryde/features/chat/views/chat.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 // --- RIDE OPTION MODEL ---
 class RideOption {
@@ -29,6 +31,7 @@ class RideOption {
   final String vehicleNumber; // License Plate
   final LatLng driverLocation;
   final String vehicleType;
+  final String driverPhone; // Driver's phone number
 
   // Display Fields
   final String displayTitle;
@@ -51,6 +54,7 @@ class RideOption {
     required this.driverLocation,
     required this.vehicleType,
     this.vehicleNumber = "",
+    this.driverPhone = "",
     this.displayTitle = "",
     this.isGeneric = false,
     this.maxWeight = "",
@@ -399,6 +403,7 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               "https://upload.wikimedia.org/wikipedia/commons/a/ac/Default_pfp.jpg",
           carDescription: driverData['car_model'] ?? "Vehicle",
           vehicleNumber: driverData['plate_number'] ?? "",
+          driverPhone: driverData['phone'] ?? "",
           driverLocation: LatLng(
             (data['driver_location_lat'] as num?)?.toDouble() ??
                 _fromLatLng!.latitude,
@@ -2678,23 +2683,118 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
             ),
           ),
           const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            height: 55,
-            child: ElevatedButton(
-              onPressed: _resetApp,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0085FF),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
+          Row(
+            children: [
+              // Message Button
+              Expanded(
+                child: SizedBox(
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // Get current User ID (The Passenger)
+                      final String currentUserId =
+                          FirebaseAuth.instance.currentUser?.uid ??
+                          "unknown_user";
+
+                      // Get driver info from the assigned driver
+                      final driverId = ride.id;
+                      final driverName = ride.driverName;
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChatScreen(
+                            orderId: widget.bookingId ?? '',
+                            senderId: currentUserId, // Sender is ME (The User)
+                            receiverId: driverId, // Receiver is DRIVER
+                            receiverName: driverName,
+                          ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF0085FF),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        side: const BorderSide(
+                          color: Color(0xFF0085FF),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.message_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          "Message",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              child: const Text(
-                "Back Home",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              const SizedBox(width: 12),
+              // Call Button
+              Expanded(
+                child: SizedBox(
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      final phoneNumber = ride.driverPhone;
+                      if (phoneNumber.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Driver phone number not available'),
+                          ),
+                        );
+                        return;
+                      }
+                      final Uri phoneUri = Uri(
+                        scheme: 'tel',
+                        path: phoneNumber,
+                      );
+                      if (await canLaunchUrl(phoneUri)) {
+                        await launchUrl(phoneUri);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not launch phone call'),
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0085FF),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.phone, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          "Call",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),
@@ -3051,32 +3151,121 @@ class _RideBookingScreenState extends State<RideBookingScreen> {
               ),
             ),
             const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                // In a real app, status updates happen via Firestore listener.
-                // Keeping this button for user to manually proceed if needed for testing.
-                onPressed: () {
-                  // You can add manual override logic here if desired
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82F6),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+            Row(
+              children: [
+                // Message Button
+                Expanded(
+                  child: SizedBox(
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        // Get current User ID (The Passenger)
+                        final String currentUserId =
+                            FirebaseAuth.instance.currentUser?.uid ??
+                            "unknown_user";
+
+                        // Get driver info from the assigned driver
+                        final driverId = ride.id;
+                        final driverName = ride.driverName;
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatScreen(
+                              orderId: widget.bookingId ?? '',
+                              senderId:
+                                  currentUserId, // Sender is ME (The User)
+                              receiverId: driverId, // Receiver is DRIVER
+                              receiverName: driverName,
+                            ),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF3B82F6),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          side: const BorderSide(
+                            color: Color(0xFF3B82F6),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.message_outlined, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            "Message",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: Text(
-                  _currentRideStatus == 'in_progress'
-                      ? "Track Delivery"
-                      : "Track Driver",
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(width: 12),
+                // Call Button
+                Expanded(
+                  child: SizedBox(
+                    height: 55,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final phoneNumber = ride.driverPhone;
+                        if (phoneNumber.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Driver phone number not available',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+                        final Uri phoneUri = Uri(
+                          scheme: 'tel',
+                          path: phoneNumber,
+                        );
+                        if (await canLaunchUrl(phoneUri)) {
+                          await launchUrl(phoneUri);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Could not launch phone call'),
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B82F6),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.phone, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            "Call",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
             const SizedBox(height: 10),
             // Show cancel only when ride hasn't been accepted yet.
